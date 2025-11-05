@@ -16,7 +16,8 @@
             min-height: 350px;
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            background-color: #0b0c10; /* Very dark background */
+            /* Initial background color will be set by JS via backgroundLightness state */
+            background-color: hsl(240, 10%, 5%); 
             overflow: hidden;
             position: relative; /* Needed for absolute positioning of axes/rect */
         }
@@ -82,9 +83,9 @@
         }
         /* Icon is NOT rotated when the section is open (points RIGHT) */
 
-
     </style>
 </head>
+
 <!-- Use flex to create the side-by-side layout. h-screen and overflow-hidden prevent main scrolling. -->
 <body class="bg-gray-100 flex h-screen overflow-hidden">
     
@@ -245,6 +246,39 @@
             </div>
         </div>
 
+        <!-- Collapsible Section: Visualization Display (Zoom and Background) -->
+        <div class="mb-4">
+            <button class="section-header" data-target="vis-display" data-expanded="true">
+                Visualization Display
+                <svg id="vis-display-icon" class="section-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <div id="vis-display" class="section-content space-y-4 pt-4 px-2" style="display: block;">
+                
+                <!-- Zoom Slider ($Z$) -->
+                <div class="space-y-2">
+                    <label for="zoomSlider" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Zoom Level ($Z$)</span>
+                        <div class="flex items-center space-x-2">
+                            <span id="zoomSliderValue" class="font-mono text-purple-600 w-10 text-right">1.0x</span>
+                        </div>
+                    </label>
+                    <input type="range" id="zoomSlider" min="0.5" max="3.0" value="1.0" step="0.1" class="w-full">
+                </div>
+
+                <!-- Background Lightness Slider ($L_{bg}$) -->
+                <div class="space-y-2">
+                    <label for="bgLightness" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Background Lightness ($L_{bg}$)</span>
+                        <div class="flex items-center space-x-2">
+                            <span id="bgLightnessValue" class="font-mono text-purple-600 w-10 text-right">5%</span>
+                        </div>
+                    </label>
+                    <input type="range" id="bgLightness" min="0" max="20" value="5" step="1" class="w-full">
+                </div>
+
+            </div>
+        </div>
+
         <!-- Collapsible Section: Boundary Object -->
         <div class="mb-4">
             <button class="section-header" data-target="boundary-object" data-expanded="false">
@@ -347,6 +381,38 @@
                 </div>
             </div>
         </div>
+
+        <!-- NEW: Collapsible Section: Visualization Annotations -->
+        <div class="mb-4">
+            <button class="section-header" data-target="vis-annotations" data-expanded="true">
+                Visualization Annotations
+                <svg id="vis-annotations-icon" class="section-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <div id="vis-annotations" class="section-content space-y-4 pt-4 px-2" style="display: block;">
+                
+                <div id="labels-list" class="space-y-3">
+                    <!-- Dynamic labels will be rendered here -->
+                </div>
+
+                <button id="addLabelBtn" class="w-full p-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition duration-150 text-sm">
+                    + Add New Annotation
+                </button>
+                
+                <!-- Variable Legend -->
+                <div class="text-xs text-gray-600 bg-gray-50 p-2 rounded mt-4 border border-gray-200">
+                    <p class="font-semibold mb-1">Variable Legend (Use in equations):</p>
+                    <ul class="list-disc list-inside space-y-0.5">
+                        <li>$S_H$ (H Spread): <code class="text-purple-700">hSpread</code></li>
+                        <li>$S_V$ (V Spread): <code class="text-purple-700">vSpread</code></li>
+                        <li>$E$ (Density Skew): <code class="text-purple-700">DENSITY_SKEW_EXPONENT</code></li>
+                        <li>$N$ (Burst Count): <code class="text-purple-700">particleCount</code></li>
+                        <li>$T$ (Speed): <code class="text-purple-700">particleDuration</code></li>
+                        <!-- Add other variables if relevant, but keep it concise -->
+                    </ul>
+                    <p class="mt-1">Example: <code class="text-purple-700">2 * vSpread</code> or <code class="text-purple-700">hSpread + vSpread</code></p>
+                </div>
+            </div>
+        </div>
         
     </div>
 
@@ -378,10 +444,11 @@
         const CENTER_RADIUS = 40; 
         
         // Base center point (fixed)
-        const BASE_CENTER_X = MARGIN.left + DRAW_WIDTH / 2;
-        const BASE_CENTER_Y = MARGIN.top + DRAW_HEIGHT / 2;
+        const BASE_CENTER_X = DRAW_WIDTH / 2; // Relative to 'g' group
+        const BASE_CENTER_Y = DRAW_HEIGHT / 2; // Relative to 'g' group
 
         // Dynamic State Variables (linked to slider default values)
+        // IMPORTANT: These names are used in the user's annotation equations
         let hSpread = 400; 
         let vSpread = 60;  
         let DENSITY_SKEW_EXPONENT = 3.0; 
@@ -392,28 +459,76 @@
         let yOffset = 0; 
         let xBias = 0.0; 
         let yBias = 0.0; 
+        let zoomLevel = 1.0; 
+        let backgroundLightness = 5; // Lightness state (0-100)
 
         // Boundary Object State
         let isRectangleVisible = false;
         let rectWidth = 500;
         let rectHeight = 200;
 
-        // Axis State
-        let isXAxisVisible = false;
-        let isYAxisVisible = false;
+        // Axis State 
         let xAxisMin = -500;
         let xAxisMax = 500;
         let yAxisMin = -175;
         let yAxisMax = 175;
         let xAxisUnit = 'Integers';
         let yAxisUnit = 'Integers';
-
+        let isXAxisVisible = false;
+        let isYAxisVisible = false;
+        
+        // NEW: Annotation State - using valueSource for the equation string
+        let labelsState = [
+            { id: 1, text: 'H-Spread ($S_H$)', valueSource: 'hSpread', visible: true, x: 700, y: 30, color: '#3498db' }, // Tracks hSpread
+            { id: 2, text: 'Double V-Spread', valueSource: '2 * vSpread', visible: true, x: 700, y: 55, color: '#2ecc71' }, // Tracks 2 * vSpread
+            { id: 3, text: 'Total Spread', valueSource: 'hSpread + vSpread', visible: false, x: 700, y: 80, color: '#f39c12' }  // Tracks hSpread + vSpread
+        ];
+        let nextLabelId = 4;
+        
+        // Expose all relevant global variables in a scope object for safe equation evaluation
+        const currentScope = {
+            hSpread,
+            vSpread,
+            DENSITY_SKEW_EXPONENT,
+            particleCount,
+            particleDuration,
+            colorDiversity,
+            xOffset,
+            yOffset,
+            xBias,
+            yBias,
+            zoomLevel,
+            backgroundLightness,
+            rectWidth,
+            rectHeight
+        };
+        // Function to update the scope object dynamically (called before evaluation)
+        function updateScope() {
+            currentScope.hSpread = hSpread;
+            currentScope.vSpread = vSpread;
+            currentScope.DENSITY_SKEW_EXPONENT = DENSITY_SKEW_EXPONENT;
+            currentScope.particleCount = particleCount;
+            currentScope.particleDuration = particleDuration;
+            currentScope.colorDiversity = colorDiversity;
+            currentScope.xOffset = xOffset;
+            currentScope.yOffset = yOffset;
+            currentScope.xBias = xBias;
+            currentScope.yBias = yBias;
+            currentScope.zoomLevel = zoomLevel;
+            currentScope.backgroundLightness = backgroundLightness;
+            currentScope.rectWidth = rectWidth;
+            currentScope.rectHeight = rectHeight;
+        }
 
         // Dynamic Center Coordinates (Effective Center of the Object)
         let centerX = BASE_CENTER_X;
         let centerY = BASE_CENTER_Y;
 
         let particleInterval;
+
+        // Base Scales (untransformed, defined by input min/max)
+        let xScaleBase = d3.scaleLinear().domain([xAxisMin, xAxisMax]).range([0, DRAW_WIDTH]);
+        let yScaleBase = d3.scaleLinear().domain([yAxisMin, yAxisMax]).range([DRAW_HEIGHT, 0]);
 
         // 1. Initialize SVG container
         const container = d3.select("#d3-container");
@@ -422,11 +537,11 @@
             .attr("viewBox", `0 0 ${VIEWBOX_WIDTH} ${CONTAINER_HEIGHT}`)
             .attr("preserveAspectRatio", "xMidYMid meet");
 
-        // Main group for transformations (to apply margins)
+        // Main group for transformations (to apply margins and ZOOM to the content)
         const g = svg.append("g")
             .attr("transform", `translate(${MARGIN.left}, ${MARGIN.top})`);
         
-        // Group for axes (placed outside the main drawing group 'g' to handle margins correctly)
+        // Group for axes and annotations (placed outside the main drawing group 'g' to handle margins correctly)
         const axisGroup = svg.append("g");
         
         // 2. Add the Central Object
@@ -467,27 +582,24 @@
             .style("text-anchor", "middle")
             .attr("fill", "#7f8c8d");
 
-
-        // 3. Coordinate Systems / Scales
-        let xScale, yScale;
-
-        function updateScales() {
+        // 3. Update Function for Base Scales (called when axis inputs change)
+        function updateBaseScales() {
             try {
                 // Parse Min/Max values safely
-                const xMin = parseFloat(document.getElementById('xAxisMin').value) || xAxisMin;
-                const xMax = parseFloat(document.getElementById('xAxisMax').value) || xAxisMax;
-                const yMin = parseFloat(document.getElementById('yAxisMin').value) || yAxisMin;
-                const yMax = parseFloat(document.getElementById('yAxisMax').value) || yAxisMax;
+                const xMin = parseFloat(document.getElementById('xAxisMin').value);
+                const xMax = parseFloat(document.getElementById('xAxisMax').value);
+                const yMin = parseFloat(document.getElementById('yAxisMin').value);
+                const yMax = parseFloat(document.getElementById('yAxisMax').value);
                 
-                // Set global state for use in particle generation
+                // Set global state for use in axis drawing
                 xAxisMin = xMin; xAxisMax = xMax;
                 yAxisMin = yMin; yAxisMax = yMax;
                 
-                // Define Scales (map data range to pixel range in the drawing area)
-                xScale = d3.scaleLinear().domain([xMin, xMax]).range([0, DRAW_WIDTH]);
-                yScale = d3.scaleLinear().domain([yMin, yMax]).range([DRAW_HEIGHT, 0]); // Note: Y is inverted in SVG
+                // Define Base Scales (map data range to pixel range in the drawing area)
+                xScaleBase = d3.scaleLinear().domain([xMin, xMax]).range([0, DRAW_WIDTH]);
+                yScaleBase = d3.scaleLinear().domain([yMin, yMax]).range([DRAW_HEIGHT, 0]); 
                 
-                // Update axis rendering
+                // Update axis rendering based on new base scales and current zoom
                 updateAxes();
 
             } catch(e) {
@@ -495,14 +607,24 @@
             }
         }
         
-        // 4. Update Function for Axes
+        // 4. Update Function for Axes (incorporating zoom)
         function updateAxes() {
             const xUnit = document.getElementById('xAxisUnit').value;
             const yUnit = document.getElementById('yAxisUnit').value;
             
+            // Create a custom D3 transform object to represent the scale change relative to the chart center
+            const transform = d3.zoomIdentity
+                .translate(BASE_CENTER_X, BASE_CENTER_Y)
+                .scale(zoomLevel)
+                .translate(-BASE_CENTER_X, -BASE_CENTER_Y);
+
+            // Use the D3 transform to rescale the base scales. This updates the domain to reflect the zoom.
+            const xScaleEffective = xScaleBase.copy().domain(transform.rescaleX(xScaleBase).domain());
+            const yScaleEffective = yScaleBase.copy().domain(transform.rescaleY(yScaleBase).domain());
+
             // X-Axis
             if (isXAxisVisible) {
-                const xAxis = d3.axisBottom(xScale).ticks(5);
+                const xAxis = d3.axisBottom(xScaleEffective).ticks(5);
                 xAxisGroup.call(xAxis).style("display", null);
                 xAxisLabel.text(xUnit).style("display", null);
             } else {
@@ -512,7 +634,7 @@
 
             // Y-Axis
             if (isYAxisVisible) {
-                const yAxis = d3.axisLeft(yScale).ticks(5);
+                const yAxis = d3.axisLeft(yScaleEffective).ticks(5);
                 yAxisGroup.call(yAxis).style("display", null);
                 yAxisLabel.text(yUnit).style("display", null);
             } else {
@@ -520,12 +642,49 @@
                 yAxisLabel.style("display", "none");
             }
         }
+        
+        // 5. Update Function for Zoom
+        function updateZoom() {
+            zoomLevel = parseFloat(document.getElementById('zoomSlider').value);
+            document.getElementById('zoomSliderValue').textContent = zoomLevel.toFixed(1) + 'x';
 
-        // 5. Update Function for Central Object and Rectangle Boundary
+            // Calculate the required translation to keep the zoom centered relative to the drawing area (DRAW_WIDTH/2)
+            const tx = BASE_CENTER_X * (1 - zoomLevel);
+            const ty = BASE_CENTER_Y * (1 - zoomLevel);
+
+            // Apply scale and translation to the main drawing group 'g'
+            g.attr("transform", `translate(${MARGIN.left + tx}, ${MARGIN.top + ty}) scale(${zoomLevel})`);
+            
+            // CRUCIAL FIX: Update axes after zoom transformation is applied
+            updateAxes(); 
+            drawAnnotations(); // Redraw annotations to update tracked values
+        }
+        
+        // 6. Update Function for Background Color
+        function updateBackgroundColor() {
+            backgroundLightness = parseInt(document.getElementById('bgLightness').value);
+            
+            // Fixed Hue (240 = Blue/Purple), Fixed Saturation (10% = Desaturated)
+            const hue = 240; 
+            const saturation = 10;
+            const lightness = backgroundLightness; 
+
+            // Apply the HSL color to the main container
+            const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+            d3.select("#d3-container").style("background-color", color);
+            
+            // Update the display value
+            document.getElementById('bgLightnessValue').textContent = `${lightness}%`;
+            
+            drawAnnotations(); // Redraw annotations to update tracked values
+        }
+
+
+        // 7. Update Function for Central Object and Rectangle Boundary
         function updatePositions() {
             // Calculate new effective center based on offsets, relative to the drawing area center
-            centerX = DRAW_WIDTH / 2 + xOffset;
-            centerY = DRAW_HEIGHT / 2 + yOffset;
+            centerX = BASE_CENTER_X + xOffset;
+            centerY = BASE_CENTER_Y + yOffset;
 
             // Immediately move the central object (which is in group 'g')
             centralObject
@@ -554,10 +713,10 @@
             
             // Immediately restart glitter to apply the new clipping boundary
             startGlitter();
+            drawAnnotations(); // Redraw annotations to update tracked values
         }
 
-
-        // 6. Particle Data Generation
+        // 8. Particle Data Generation
         function generateParticles(count) {
             const particles = [];
             const saturation = 100 * colorDiversity; 
@@ -611,7 +770,7 @@
             return particles;
         }
 
-        // 7. Animation Function: Defines the fast lifecycle of a single particle
+        // 9. Animation Function: Defines the fast lifecycle of a single particle
         function animateParticle(selection) {
             const duration = particleDuration;
             
@@ -621,212 +780,406 @@
                 .attr("fill", d => d.color)
 
                 // PHASE 1: SHOW UP (10% of duration)
-                .transition().duration(duration * 0.1) 
-                .ease(d3.easeQuadOut)
-                .attr("r", d => d.r) 
-                .attr("opacity", d => d.initialOpacity) 
-
-                // PHASE 2 & 3: GLOW & VANISH
-                .transition().duration(duration * 0.9) // 60% glow + 30% vanish
-                .ease(d3.easeQuadIn)
-                .attr("r", 0) 
-                .attr("opacity", 0) 
-
-                // Remove the element from the DOM
+                .transition().duration(duration * 0.1)
+                    .attr("r", d => d.r) // Grow to full radius
+                // PHASE 2: PAUSE / FULL SIZE (70% of duration)
+                .transition().delay(duration * 0.1).duration(duration * 0.7)
+                    .attr("opacity", d => d.initialOpacity)
+                // PHASE 3: FADE AWAY (20% of duration)
+                .transition().delay(duration * 0.8).duration(duration * 0.2)
+                    .attr("opacity", 0)
+                // FINAL: Remove the element
                 .on("end", function() {
                     d3.select(this).remove();
                 });
         }
-
-        // 8. Update/Render function (Particles)
-        function updateParticles() {
-            const newParticles = generateParticles(particleCount);
-
-            // Bind new particle data to the main group 'g'
-            const particleSelection = g.selectAll(".glitter-particle")
-                .data(newParticles, d => d.id);
-
-            // ENTER selection: Append new circles and start animation
-            particleSelection.enter()
-                .append("circle")
-                .attr("class", "glitter-particle") 
-                .attr("cx", d => d.x)
-                .attr("cy", d => d.y)
-                .call(animateParticle); 
-        }
-
-        // 9. Interval Control
+        
+        // 10. Continuous Particle Generation Manager (startGlitter)
         function startGlitter() {
+            // Clear any previous interval to stop continuous generation
             if (particleInterval) {
                 clearInterval(particleInterval);
             }
-            updateParticles();
-            const intervalMs = Math.min(particleDuration * 0.25, 150);
-            particleInterval = setInterval(updateParticles, intervalMs); 
+            
+            // Clear existing particles from the drawing group 'g'
+            g.selectAll(".glitter-particle").remove();
+
+            const intervalTime = 50; // Emit a new burst every 50ms for smooth, continuous flow
+
+            particleInterval = setInterval(() => {
+                const particles = generateParticles(particleCount);
+                
+                // Bind new particles and start their animation cycle
+                g.selectAll(null)
+                    .data(particles, d => d.id) // Key by ID to ensure correct binding
+                    .enter()
+                    .append("circle")
+                    .attr("class", "glitter-particle") // IMPORTANT: Class for future removal
+                    .attr("cx", d => d.x)
+                    .attr("cy", d => d.y)
+                    .call(animateParticle); // Start the animation chain
+                
+            }, intervalTime);
         }
 
-        // 10. Slider Interaction Mapping
-        const sliders = [
-            { id: 'hSpread', variable: 'hSpread', update: startGlitter, format: v => v.toFixed(0) },
-            { id: 'vSpread', variable: 'vSpread', update: startGlitter, format: v => v.toFixed(0) },
-            { id: 'densitySkew', variable: 'DENSITY_SKEW_EXPONENT', update: startGlitter, format: v => v.toFixed(1) },
-            { id: 'particleCount', variable: 'particleCount', update: startGlitter, format: v => v.toFixed(0) },
-            { id: 'particleDuration', variable: 'particleDuration', update: startGlitter, format: v => (v / 1000).toFixed(1) + 's' },
-            { id: 'colorDiversity', variable: 'colorDiversity', update: startGlitter, format: v => (v * 100).toFixed(0) + '%' },
-            { id: 'xOffset', variable: 'xOffset', update: updatePositions, format: v => v.toFixed(0) },
-            { id: 'yOffset', variable: 'yOffset', update: updatePositions, format: v => v.toFixed(0) },
-            { id: 'xBias', variable: 'xBias', update: startGlitter, format: v => v.toFixed(1) },
-            { id: 'yBias', variable: 'yBias', update: startGlitter, format: v => v.toFixed(1) },
-            { id: 'rectWidth', variable: 'rectWidth', update: updatePositions, format: v => v.toFixed(0) },
-            { id: 'rectHeight', variable: 'rectHeight', update: updatePositions, format: v => v.toFixed(0) }
-        ];
+        // --- NEW ANNOTATION LOGIC ---
 
-        // Helper function to update the global state and UI for a slider
-        function updateSlider(id, value) {
-            const sliderConfig = sliders.find(s => s.id === id);
-            if (!sliderConfig) return;
-
-            const element = document.getElementById(id);
-            const valueSpan = document.getElementById(id + 'Value');
+        // Function to safely evaluate a user-defined equation string within the current scope
+        function evaluateAnnotationValue(equationString) {
+            if (!equationString || equationString.trim() === '') return null;
             
-            // Clamp value to min/max
-            const min = parseFloat(element.min);
-            const max = parseFloat(element.max);
-            value = Math.max(min, Math.min(max, value));
-
-            // Adjust value to nearest step to prevent floating point issues
-            const step = parseFloat(element.step || 1);
-            const precision = step.toString().split('.')[1]?.length || 0;
-            value = parseFloat(value.toFixed(precision));
+            // 1. Ensure the scope is up-to-date with the latest global state
+            updateScope();
             
-
-            // Update DOM and internal state
-            element.value = value;
-            if (valueSpan) {
-                valueSpan.textContent = sliderConfig.format(value);
-            }
-
-            // Update global variable
-            if (sliderConfig.variable === 'hSpread') hSpread = value;
-            else if (sliderConfig.variable === 'vSpread') vSpread = value;
-            else if (sliderConfig.variable === 'DENSITY_SKEW_EXPONENT') DENSITY_SKEW_EXPONENT = value;
-            else if (sliderConfig.variable === 'particleCount') particleCount = value;
-            else if (sliderConfig.variable === 'particleDuration') particleDuration = value;
-            else if (sliderConfig.variable === 'colorDiversity') colorDiversity = value; 
-            else if (sliderConfig.variable === 'xOffset') xOffset = value; 
-            else if (sliderConfig.variable === 'yOffset') yOffset = value; 
-            else if (sliderConfig.variable === 'xBias') xBias = value; 
-            else if (sliderConfig.variable === 'yBias') yBias = value; 
-            else if (sliderConfig.variable === 'rectWidth') rectWidth = value;
-            else if (sliderConfig.variable === 'rectHeight') rectHeight = value;
+            const keys = Object.keys(currentScope);
+            const values = Object.values(currentScope);
             
-            // Execute update function
-            if (sliderConfig.update) {
-                sliderConfig.update();
-            }
-        }
-
-        // 11. Collapsible/Event Listeners Initialization
-        document.addEventListener('DOMContentLoaded', () => {
-            
-            // Collapsible Section Logic
-            document.querySelectorAll('.section-header').forEach(header => {
-                header.addEventListener('click', () => {
-                    const targetId = header.dataset.target;
-                    const content = document.getElementById(targetId);
-                    const icon = document.getElementById(targetId + '-icon');
-                    
-                    if (content.style.display === 'none' || content.style.display === '') {
-                        content.style.display = 'block';
-                        icon.classList.remove('rotate-90'); // Show right arrow (open)
-                        header.dataset.expanded = 'true';
-                    } else {
-                        content.style.display = 'none';
-                        icon.classList.add('rotate-90'); // Show down arrow (closed)
-                        header.dataset.expanded = 'false';
-                    }
-                });
-            });
-
-
-            // Title and Description Listeners
-            const titleInput = document.getElementById('canvasTitleInput');
-            const descriptionInput = document.getElementById('canvasDescriptionInput');
-            const titleDisplay = document.getElementById('canvas-title-display');
-            const descriptionDisplay = document.getElementById('canvas-description-display');
-
-            const updateTitleDescription = () => {
-                titleDisplay.textContent = titleInput.value;
-                descriptionDisplay.textContent = descriptionInput.value;
-            };
-            titleInput.addEventListener('input', updateTitleDescription);
-            descriptionInput.addEventListener('input', updateTitleDescription);
-            updateTitleDescription(); // Initial display
-
-
-            // Slider and Button Listeners
-            sliders.forEach(s => {
-                const element = document.getElementById(s.id);
-                // Input (Slider drag) listener
-                element.addEventListener('input', (e) => {
-                    updateSlider(s.id, parseFloat(e.target.value));
-                });
-            });
-
-            // Button click listener (delegation)
-            document.getElementById('control-panel').addEventListener('click', (e) => {
-                const button = e.target.closest('.control-btn');
-                if (!button) return;
-
-                const targetId = button.dataset.target;
-                const action = button.dataset.action;
-                const targetElement = document.getElementById(targetId);
-
-                if (targetElement) {
-                    const currentValue = parseFloat(targetElement.value);
-                    const step = parseFloat(targetElement.step || 1);
-                    let newValue = currentValue;
-
-                    if (action === 'increment') {
-                        newValue = currentValue + step;
-                    } else if (action === 'decrement') {
-                        newValue = currentValue - step;
-                    }
-
-                    updateSlider(targetId, newValue);
+            // 2. Safe Execution using Function Constructor
+            try {
+                // The equation must be a valid JavaScript expression.
+                const formula = new Function(...keys, `return ${equationString};`);
+                let result = formula(...values);
+                
+                if (typeof result !== 'number' || isNaN(result)) {
+                    return NaN; // Indicate calculation failure
                 }
+                return result;
+            } catch (e) {
+                // console.error("Equation error:", e);
+                return NaN; // Return NaN on syntax error or execution failure
+            }
+        }
+
+        // Helper to format the value based on typical units
+        function formatValue(value) {
+            if (value === null) return 'N/A';
+            if (isNaN(value)) return 'ERROR';
+
+            // Automatic formatting logic based on magnitude/type
+            if (value === 0) return '0';
+            
+            // Duration (often small, but particleDuration is in ms)
+            if (value > 1000 && value % 1000 === 0 && value / 1000 < 5) {
+                return (value / 1000).toFixed(1) + 's';
+            }
+            
+            // Percentages (for diversity, which is 0-1)
+            if (value <= 1.0 && value > 0 && Math.abs(value - 0.5) < 0.5) {
+                return value.toFixed(2);
+            }
+            
+            // Floats (e.g., bias, skew)
+            if (value < 10 && !Number.isInteger(value)) {
+                return value.toFixed(1);
+            }
+
+            // Default for large numbers (integers)
+            return Math.round(value).toString();
+        }
+
+        // 11. Annotation Rendering 
+        function drawAnnotations() {
+            // Annotations are added to axisGroup so they are not affected by the main group's zoom/translation
+            const annotations = axisGroup.selectAll(".annotation")
+                .data(labelsState.filter(d => d.visible), d => d.id);
+
+            // Exit selection (Remove annotations that are no longer visible)
+            annotations.exit().remove();
+
+            // Enter selection (Add new annotations)
+            annotations.enter()
+                .append("text")
+                .attr("class", "annotation")
+                .merge(annotations) // Merge enter and update selections
+                .attr("x", d => d.x) // Fixed X position (relative to VIEWBOX)
+                .attr("y", d => d.y) // Fixed Y position (relative to VIEWBOX)
+                .attr("fill", d => d.color)
+                .attr("font-size", "14px")
+                .attr("font-style", "italic")
+                .text(d => {
+                    const result = evaluateAnnotationValue(d.valueSource);
+                    
+                    // Display static text if valueSource is empty or only whitespace
+                    if (!d.valueSource || d.valueSource.trim() === '') {
+                        return d.text;
+                    }
+                    
+                    const formattedValue = formatValue(result);
+                    // Append the result to the user's text
+                    return `${d.text}: ${formattedValue}`;
+                });
+        }
+
+        // 12. Update Control Panel Label List 
+        function renderLabelsList() {
+            const listContainer = d3.select("#labels-list");
+
+            // Data join for the wrapper divs for each label
+            const labelWrappers = listContainer.selectAll(".label-item")
+                .data(labelsState, d => d.id);
+
+            // Exit selection
+            labelWrappers.exit().remove();
+
+            // Enter selection (Create the full HTML structure for a new label)
+            const newLabelWrappers = labelWrappers.enter()
+                .append("div")
+                .attr("class", "label-item border-b border-gray-100 pb-3 mb-3 pt-1");
+
+            // Row 1: Checkbox and Remove Button
+            const row1 = newLabelWrappers.append("div")
+                .attr("class", "flex justify-between items-center mb-1");
+            
+            row1.append("label")
+                .attr("for", d => `label-check-${d.id}`)
+                .attr("class", "text-sm font-medium text-gray-700")
+                .text("Show Annotation:");
+
+            const row1Controls = row1.append("div")
+                .attr("class", "flex items-center space-x-2");
+                
+            row1Controls.append("input")
+                .attr("type", "checkbox")
+                .attr("class", "h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500")
+                .attr("id", d => `label-check-${d.id}`)
+                .property("checked", d => d.visible)
+                .on("change", function(event, d) {
+                    d.visible = this.checked;
+                    drawAnnotations(); 
+                });
+
+            // Add Remove Button
+            row1Controls.append("button")
+                .attr("class", "control-btn bg-red-100 text-red-700 hover:bg-red-300")
+                .style("width", "1.5rem")
+                .style("height", "1.5rem")
+                .text("x")
+                .on("click", (event, d) => {
+                    labelsState = labelsState.filter(label => label.id !== d.id);
+                    renderLabelsList(); 
+                    drawAnnotations();  
+                });
+
+            // Row 2: Annotation Text Input
+            const row2 = newLabelWrappers.append("div")
+                .attr("class", "mb-2");
+            row2.append("label")
+                .attr("class", "text-xs font-medium text-gray-500 block mb-1")
+                .text("Annotation Text (Prefix for Value):");
+
+            row2.append("input")
+                .attr("type", "text")
+                .attr("class", "w-full p-1 border border-gray-300 rounded-lg text-sm focus:ring-purple-500 focus:border-purple-500")
+                .attr("value", d => d.text)
+                .on("input", function(event, d) {
+                    d.text = this.value;
+                    drawAnnotations(); 
+                });
+
+            // Row 3: Equation Input (Replaces dropdown)
+            const row3 = newLabelWrappers.append("div");
+            row3.append("label")
+                .attr("class", "text-xs font-medium text-gray-500 block mb-1")
+                .text("Equation/Value Source (e.g., 2 * vSpread):");
+            
+            row3.append("input")
+                .attr("type", "text")
+                .attr("class", "w-full p-1 border border-gray-300 rounded-lg text-sm font-mono focus:ring-purple-500 focus:border-purple-500")
+                .attr("value", d => d.valueSource)
+                .on("input", function(event, d) {
+                    d.valueSource = this.value;
+                    drawAnnotations(); 
+                });
+
+            // Merge and update listeners for existing elements (required for D3 update pattern)
+            labelWrappers.merge(newLabelWrappers);
+            
+            // Ensure listeners are applied to all checkboxes
+            listContainer.selectAll(".label-item input[type='checkbox']").on("change.update", function(event, d) {
+                d.visible = this.checked;
+                drawAnnotations();
+            });
+            // Ensure listeners are applied to all text inputs for text content
+            listContainer.selectAll(".label-item input[type='text']:nth-child(2)").on("input.update", function(event, d) {
+                d.text = this.value;
+                drawAnnotations();
+            });
+             // Ensure listeners are applied to all equation/value source inputs
+            listContainer.selectAll(".label-item input[type='text']:nth-child(4)").on("input.update", function(event, d) {
+                d.valueSource = this.value;
+                drawAnnotations();
+            });
+        }
+
+        // Add New Label logic
+        function addLabel() {
+            labelsState.push({
+                id: nextLabelId++,
+                text: 'New Metric',
+                valueSource: 'hSpread', // Default to tracking hSpread
+                visible: true,
+                x: 700, 
+                y: 30 + (labelsState.length * 25), // Stacks new labels below existing ones
+                color: d3.schemeCategory10[labelsState.length % 10] || '#9b59b6' // Use a basic color scheme for variety
+            });
+            renderLabelsList();
+            drawAnnotations();
+        }
+
+
+        // 13. Master Update Function (updateGlitter)
+        function updateGlitter() {
+            // This function is the main trigger for redrawing/restarting when particle parameters change
+            updateBaseScales(); // This updates base scales and triggers updateAxes
+            updatePositions(); 
+            startGlitter();
+            drawAnnotations(); // Re-draw annotations to update tracked values
+        }
+
+        // 14. Setup Control Event Handlers
+        function setupControls() {
+            // General input listener for immediate updates
+            document.querySelectorAll('input[type="range"], input[type="text"], select').forEach(input => {
+                input.addEventListener('input', (e) => {
+                    const id = e.target.id;
+                    const value = e.target.value;
+                    let needsGlitterUpdate = false;
+
+                    // Update parameters and display values
+                    switch (id) {
+                        // Particle Params
+                        case 'hSpread': hSpread = parseFloat(value); document.getElementById('hSpreadValue').textContent = value; needsGlitterUpdate = true; break;
+                        case 'vSpread': vSpread = parseFloat(value); document.getElementById('vSpreadValue').textContent = value; needsGlitterUpdate = true; break;
+                        case 'densitySkew': DENSITY_SKEW_EXPONENT = parseFloat(value); document.getElementById('densitySkewValue').textContent = DENSITY_SKEW_EXPONENT.toFixed(1); needsGlitterUpdate = true; break;
+                        case 'particleCount': particleCount = parseInt(value); document.getElementById('particleCountValue').textContent = value; needsGlitterUpdate = true; break;
+                        case 'particleDuration': particleDuration = parseInt(value); document.getElementById('particleDurationValue').textContent = value / 1000 + 's'; needsGlitterUpdate = true; break;
+                        case 'colorDiversity': colorDiversity = parseFloat(value); document.getElementById('colorDiversityValue').textContent = (colorDiversity * 100).toFixed(0) + '%'; needsGlitterUpdate = true; break;
+                        case 'xOffset': xOffset = parseInt(value); document.getElementById('xOffsetValue').textContent = value; updatePositions(); break;
+                        case 'yOffset': yOffset = parseInt(value); document.getElementById('yOffsetValue').textContent = value; updatePositions(); break;
+                        case 'xBias': xBias = parseFloat(value); document.getElementById('xBiasValue').textContent = xBias.toFixed(1); needsGlitterUpdate = true; break;
+                        case 'yBias': yBias = parseFloat(value); document.getElementById('yBiasValue').textContent = yBias.toFixed(1); needsGlitterUpdate = true; break;
+
+                        // Boundary Params
+                        case 'rectWidth': rectWidth = parseInt(value); document.getElementById('rectWidthValue').textContent = value; updateRectangle(); break;
+                        case 'rectHeight': rectHeight = parseInt(value); document.getElementById('rectHeightValue').textContent = value; updateRectangle(); break;
+                        
+                        // Axis Params (trigger base scale update)
+                        case 'xAxisMin':
+                        case 'xAxisMax':
+                        case 'yAxisMin':
+                        case 'yAxisMax':
+                        case 'xAxisUnit':
+                        case 'yAxisUnit':
+                            updateBaseScales(); break;
+                            
+                        // Visualization Display Controls
+                        case 'zoomSlider':
+                            updateZoom(); break;
+                        case 'bgLightness': // Background Lightness
+                            updateBackgroundColor(); break;
+                    }
+
+                    // Trigger full update for particle params
+                    if (needsGlitterUpdate) {
+                        updateGlitter();
+                    }
+                });
             });
 
-            // Rectangle Checkbox Listener
-            const enableRect = document.getElementById('enableRectangle');
-            enableRect.addEventListener('change', (e) => {
+            // Button controls for particle parameters
+            document.querySelectorAll('.control-btn').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    const targetId = button.dataset.target;
+                    const action = button.dataset.action;
+                    const inputElement = document.getElementById(targetId);
+                    
+                    if (inputElement) {
+                        const step = parseFloat(inputElement.step) || 1;
+                        let currentValue = parseFloat(inputElement.value);
+                        
+                        if (action === 'increment') {
+                            currentValue = Math.min(parseFloat(inputElement.max), currentValue + step);
+                        } else if (action === 'decrement') {
+                            currentValue = Math.max(parseFloat(inputElement.min), currentValue - step);
+                        }
+
+                        inputElement.value = currentValue.toFixed(inputElement.step.includes('.') ? 1 : 0);
+                        inputElement.dispatchEvent(new Event('input')); // Trigger input event
+                    }
+                });
+            });
+            
+            // Checkbox controls (Axis and Rectangle)
+            document.getElementById('enableRectangle').addEventListener('change', (e) => {
                 isRectangleVisible = e.target.checked;
                 updateRectangle();
             });
+            document.getElementById('enableXAxis').addEventListener('change', (e) => {
+                isXAxisVisible = e.target.checked;
+                updateAxes();
+            });
+            document.getElementById('enableYAxis').addEventListener('change', (e) => {
+                isYAxisVisible = e.target.checked;
+                updateAxes();
+            });
 
-            // Axis Checkbox and Input Listeners
-            const axisChangeHandler = () => {
-                isXAxisVisible = document.getElementById('enableXAxis').checked;
-                isYAxisVisible = document.getElementById('enableYAxis').checked;
-                updateScales(); // This calls updateAxes and updates Min/Max values
-            };
+            // NEW: Add Label button listener
+            document.getElementById('addLabelBtn').addEventListener('click', addLabel);
 
-            document.getElementById('enableXAxis').addEventListener('change', axisChangeHandler);
-            document.getElementById('enableYAxis').addEventListener('change', axisChangeHandler);
-            document.getElementById('xAxisUnit').addEventListener('change', updateAxes);
-            document.getElementById('yAxisUnit').addEventListener('change', updateAxes);
-            document.getElementById('xAxisMin').addEventListener('input', updateScales);
-            document.getElementById('xAxisMax').addEventListener('input', updateScales);
-            document.getElementById('yAxisMin').addEventListener('input', updateScales);
-            document.getElementById('yAxisMax').addEventListener('input', updateScales);
-            
 
-            // Start the D3 visualization
-            updateScales(); // Initialize scales and axes (must be first)
-            updatePositions(); // Initialize center position and rectangle
-            startGlitter();
-        });
+            // Title/Description listener
+            document.getElementById('canvasTitleInput').addEventListener('input', (e) => {
+                document.getElementById('canvas-title-display').textContent = e.target.value;
+            });
+            document.getElementById('canvasDescriptionInput').addEventListener('input', (e) => {
+                document.getElementById('canvas-description-display').textContent = e.target.value;
+            });
 
+            // Collapse/Expand functionality
+            document.querySelectorAll('.section-header').forEach(header => {
+                header.addEventListener('click', (e) => {
+                    // Find the button if the click was on the child elements
+                    const button = e.currentTarget;
+                    const targetId = button.dataset.target;
+                    const contentDiv = document.getElementById(targetId);
+                    const icon = document.getElementById(targetId + '-icon');
+                    let isExpanded = button.dataset.expanded === 'true';
+
+                    if (contentDiv && icon) {
+                        if (isExpanded) {
+                            contentDiv.style.display = 'none';
+                            icon.classList.add('rotate-90'); // Collapse icon state
+                            button.dataset.expanded = 'false';
+                        } else {
+                            contentDiv.style.display = 'block';
+                            icon.classList.remove('rotate-90'); // Expand icon state
+                            button.dataset.expanded = 'true';
+                        }
+                    }
+                });
+            });
+        }
+
+
+        // 15. Initialization
+        function initialize() {
+            // Set initial base scales (reads input fields)
+            updateBaseScales(); 
+            // Apply initial display settings
+            updateZoom();
+            updateBackgroundColor(); // Set initial background color
+            // Setup all controls and listeners
+            setupControls(); 
+            // Render the initial list of labels in the control panel
+            renderLabelsList(); 
+            // Start the glitter animation
+            startGlitter(); 
+            // Draw initial annotations on the SVG
+            drawAnnotations();
+        }
+
+        // Start the application setup once the window is fully loaded
+        window.onload = initialize;
     </script>
 </body>
 </html>

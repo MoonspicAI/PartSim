@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Responsive Particle System Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght400;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles for better aesthetics and interaction */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Dark background */
+            overflow: hidden; /* Prevent body scrolling */
+        }
+        .sidebar {
+            width: 300px;
+            max-width: 90vw;
+            transition: transform 0.3s ease-in-out;
+            transform: translateX(0);
+        }
+        .sidebar.collapsed {
+            transform: translateX(-100%);
+            width: 0;
+            padding: 0;
+            border: none;
+        }
+        .sidebar-container {
+             /* Fixed position off-screen when toggled */
+            transition: left 0.3s ease-in-out;
+            z-index: 20;
+            left: 0;
+        }
+        .collapsible-header {
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.15s;
+        }
+        .collapsible-header:hover {
+            background-color: #1e2531;
+        }
+        .collapsible-content {
+            max-height: 80vh; /* Limit height for scrollability */
+            overflow-y: auto;
+            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+            padding-top: 1rem;
+            padding-bottom: 1rem;
+        }
+        .collapsible-content.hidden {
+            max-height: 0;
+            overflow: hidden;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+        canvas {
+            cursor: crosshair;
+        }
+
+        /* Focus state for range input */
+        input[type="range"]::-webkit-slider-thumb:focus {
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.5);
+        }
+        .zoom-level-indicator {
+            min-width: 4rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="text-white">
+
+    <div id="app" class="flex h-screen w-full relative">
+
+        <!-- Sidebar for Controls -->
+        <div id="sidebar" class="sidebar absolute h-full bg-[#161b22] shadow-xl border-r border-[#30363d] p-4 flex flex-col">
+
+            <!-- Collapsible Section Header (The new button) -->
+            <div id="collapsibleHeader" class="collapsible-header px-2 py-3 mb-2 rounded-lg font-bold text-lg flex items-center justify-between border-b border-[#30363d]">
+                <span>Particle Parameters</span>
+                <svg id="collapseIcon" class="w-5 h-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+            </div>
+
+            <!-- Collapsible Content -->
+            <div id="collapsibleContent" class="collapsible-content space-y-4">
+                <!-- Density Slider -->
+                <div>
+                    <label for="density" class="block text-sm font-medium text-gray-400 mb-1">Density: <span id="densityValue">50</span></label>
+                    <input type="range" id="density" min="10" max="100" value="50" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer range-lg">
+                </div>
+
+                <!-- Speed Slider -->
+                <div>
+                    <label for="speed" class="block text-sm font-medium text-gray-400 mb-1">Max Speed: <span id="speedValue">2.5</span></label>
+                    <input type="range" id="speed" min="0.5" max="5" step="0.1" value="2.5" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <!-- Size Slider -->
+                <div>
+                    <label for="size" class="block text-sm font-medium text-gray-400 mb-1">Size: <span id="sizeValue">3</span></label>
+                    <input type="range" id="size" min="1" max="10" value="3" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
+                </div>
+
+                <!-- Color Picker (simplified) -->
+                <div>
+                    <label for="color" class="block text-sm font-medium text-gray-400 mb-1">Base Color</label>
+                    <input type="color" id="color" value="#4F46E5" class="w-full h-10 p-1 bg-gray-700 rounded-lg border-none cursor-pointer">
+                </div>
+
+                <!-- Reset Button -->
+                <button onclick="resetSimulation()" class="w-full py-2 mt-4 bg-red-600 hover:bg-red-700 rounded-lg font-semibold shadow-lg transition duration-150">
+                    Reset Particles
+                </button>
+            </div>
+
+            <div class="mt-auto pt-4 border-t border-[#30363d]">
+                <!-- Zoom Control (New Feature) -->
+                <div class="mt-4 p-3 bg-[#1e2531] rounded-lg shadow-inner">
+                    <h3 class="font-bold text-sm mb-2 text-blue-400">Zoom Control</h3>
+                    <div class="flex items-center space-x-2">
+                        <!-- Zoom Out Button -->
+                        <button onclick="adjustZoom(-0.2)" class="p-1.5 bg-gray-600 hover:bg-gray-500 rounded-full transition duration-150 text-sm font-bold w-8 h-8 flex items-center justify-center">-</button>
+
+                        <!-- Slider -->
+                        <input type="range" id="zoomSlider" min="0.5" max="3.0" step="0.1" value="1.0" class="flex-grow h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" oninput="updateZoom(this.value)">
+
+                        <!-- Zoom In Button -->
+                        <button onclick="adjustZoom(0.2)" class="p-1.5 bg-gray-600 hover:bg-gray-500 rounded-full transition duration-150 text-sm font-bold w-8 h-8 flex items-center justify-center">+</button>
+                    </div>
+                    <div class="flex justify-between mt-2 text-xs text-gray-400">
+                        <span>0.5x</span>
+                        <span id="zoomLevelIndicator" class="zoom-level-indicator text-white font-medium">1.0x</span>
+                        <span>3.0x</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Canvas Area -->
+        <div class="flex-grow relative overflow-hidden">
+            <canvas id="particleCanvas" class="w-full h-full block"></canvas>
+
+            <!-- Floating Toggle Button for Mobile/Collapsed State -->
+            <button id="toggleButton" class="absolute top-4 left-4 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg z-30 transition-transform duration-300">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+            </button>
+        </div>
+    </div>
+
+<script type="module">
+    // --- Firebase/Auth Setup (Mandatory in Canvas Environment) ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, onSnapshot, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    setLogLevel('Debug');
+
+    // Global variables provided by the Canvas environment
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-particle-app';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    let app;
+    let db;
+    let auth;
+    let userId;
+    let isAuthReady = false;
+    
+    // --- New variables for retry logic ---
+    let listenerAttempts = 0;
+    const MAX_LISTENER_ATTEMPTS = 3;
+
+
+    if (firebaseConfig) {
+        app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+
+        async function authenticate() {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Firebase Auth Error:", error);
+            }
+        }
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                userId = user.uid;
+                console.log("User signed in with UID:", userId);
+            } else {
+                // Should not happen if custom token or anonymous sign-in succeeds
+                userId = crypto.randomUUID();
+                console.log("No authenticated user, using temporary ID:", userId);
+            }
+            isAuthReady = true;
+            // Start listening for state after auth is ready
+            setupFirestoreListener();
+        });
+
+        authenticate();
+    } else {
+        console.warn("Firebase config not found. State will not be persisted.");
+        userId = crypto.randomUUID();
+        isAuthReady = true;
+    }
+
+    // --- Particle System and UI Logic ---
+
+    const canvas = document.getElementById('particleCanvas');
+    const ctx = canvas.getContext('2d');
+    const sidebar = document.getElementById('sidebar');
+    const toggleButton = document.getElementById('toggleButton');
+    const collapsibleHeader = document.getElementById('collapsibleHeader');
+    const collapsibleContent = document.getElementById('collapsibleContent');
+    const collapseIcon = document.getElementById('collapseIcon');
+
+    // State object, which will be synced with Firestore
+    let state = {
+        density: 50,
+        maxSpeed: 2.5,
+        size: 3,
+        color: '#4F46E5',
+        zoomLevel: 1.0,
+        isSidebarCollapsed: false,
+        isContentCollapsed: false,
+    };
+
+    // DOM elements for parameters and zoom
+    const densityInput = document.getElementById('density');
+    const speedInput = document.getElementById('speed');
+    const sizeInput = document.getElementById('size');
+    const colorInput = document.getElementById('color');
+    const zoomSlider = document.getElementById('zoomSlider');
+    const zoomLevelIndicator = document.getElementById('zoomLevelIndicator');
+
+    let particles = [];
+    let animationFrameId = null;
+
+    // --- UI Interaction Functions ---
+
+    // 1. Sidebar/Collapsible Logic
+    function toggleSidebar(shouldCollapse) {
+        const collapsed = shouldCollapse !== undefined ? shouldCollapse : !state.isSidebarCollapsed;
+        state.isSidebarCollapsed = collapsed;
+        sidebar.classList.toggle('collapsed', collapsed);
+        toggleButton.classList.toggle('rotate-180', !collapsed); // Simple transition for floating button
+        // Persist change
+        if (isAuthReady) saveState();
+    }
+
+    function toggleCollapsibleContent(shouldCollapse) {
+        const collapsed = shouldCollapse !== undefined ? shouldCollapse : !state.isContentCollapsed;
+        state.isContentCollapsed = collapsed;
+        collapsibleContent.classList.toggle('hidden', collapsed);
+        collapseIcon.classList.toggle('rotate-180', collapsed);
+        // Persist change
+        if (isAuthReady) saveState();
+    }
+
+    // Event listeners for UI
+    toggleButton.addEventListener('click', () => toggleSidebar());
+    collapsibleHeader.addEventListener('click', () => toggleCollapsibleContent());
+
+
+    // 2. Zoom Control Logic
+    const MIN_ZOOM = 0.5;
+    const MAX_ZOOM = 3.0;
+    const ZOOM_STEP = 0.1;
+
+    function updateZoom(newZoom) {
+        let zoom = parseFloat(newZoom);
+        state.zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
+
+        // Update UI elements
+        zoomSlider.value = state.zoomLevel;
+        zoomLevelIndicator.textContent = `${state.zoomLevel.toFixed(1)}x`;
+
+        // Persist change
+        if (isAuthReady) saveState();
+    }
+
+    function adjustZoom(delta) {
+        const newZoom = state.zoomLevel + delta;
+        updateZoom(newZoom);
+    }
+
+    // Mouse wheel zoom on canvas
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault(); // Prevent page scrolling
+        // Adjust sensitivity for scroll wheel
+        const scrollDelta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+        adjustZoom(scrollDelta);
+    });
+
+    // --- Particle Class and Simulation Logic ---
+
+    class Particle {
+        constructor(x, y, vx, vy, color, size) {
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+            this.color = color;
+            this.size = size;
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+
+            // Simple boundary bounce
+            if (this.x - this.size < 0 || this.x + this.size > canvas.width) {
+                this.vx *= -1;
+                // Correct position to prevent sticking
+                if (this.x - this.size < 0) this.x = this.size;
+                if (this.x + this.size > canvas.width) this.x = canvas.width - this.size;
+            }
+            if (this.y - this.size < 0 || this.y + this.size > canvas.height) {
+                this.vy *= -1;
+                // Correct position
+                if (this.y - this.size < 0) this.y = this.size;
+                if (this.y + this.size > canvas.height) this.y = canvas.height - this.size;
+            }
+        }
+
+        draw(ctx) {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size * state.zoomLevel, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+        }
+    }
+
+    function initParticles() {
+        particles = [];
+        const numParticles = state.density * 5; // Scaling factor
+        for (let i = 0; i < numParticles; i++) {
+            const x = Math.random() * canvas.width;
+            const y = Math.random() * canvas.height;
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * state.maxSpeed + 0.5;
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+            particles.push(new Particle(x, y, vx, vy, state.color, state.size));
+        }
+    }
+
+    function resetSimulation() {
+        if (animationFrameId) {
+            // Corrected typo from animationFrameFrameId to animationFrameId
+            cancelAnimationFrame(animationFrameId); 
+        }
+        initParticles();
+        animate();
+    }
+
+    function animate() {
+        // Clear canvas
+        ctx.fillStyle = 'rgba(13, 17, 23, 0.5)'; // Semi-transparent for subtle trails
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Apply Zoom Transformation
+        // The transformation is applied to the context, affecting all subsequent drawing calls.
+        ctx.save();
+        
+        // 1. Translate to center
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+
+        // 2. Apply scale (Zoom)
+        ctx.scale(state.zoomLevel, state.zoomLevel);
+
+        // 3. Translate back to maintain origin reference
+        ctx.translate(-canvas.width / 2, -canvas.height / 2);
+
+        // Update and Draw Particles
+        particles.forEach(p => {
+            p.update();
+            p.draw(ctx);
+        });
+
+        // Restore context to undo the transformations
+        ctx.restore();
+
+        animationFrameId = requestAnimationFrame(animate);
+    }
+
+    // --- Initialization and Event Handling ---
+
+    function resizeCanvas() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+    }
+
+    // Debounce window resize
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            resizeCanvas();
+            // Re-initialize particles on resize to ensure they fit the new dimensions
+            initParticles();
+        }, 200);
+    });
+
+    // Update particles' properties based on state changes
+    function updateParticleProperties() {
+        particles.forEach(p => {
+            p.color = state.color;
+            p.size = state.size;
+            // Re-apply max speed limit (optional, simple systems often don't need this)
+            const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+            if (speed > state.maxSpeed) {
+                const ratio = state.maxSpeed / speed;
+                p.vx *= ratio;
+                p.vy *= ratio;
+            }
+        });
+    }
+
+    // Update state from UI
+    function handleInputChange() {
+        state.density = parseInt(densityInput.value);
+        state.maxSpeed = parseFloat(speedInput.value);
+        state.size = parseInt(sizeInput.value);
+        state.color = colorInput.value;
+
+        document.getElementById('densityValue').textContent = state.density;
+        document.getElementById('speedValue').textContent = state.maxSpeed.toFixed(1);
+        document.getElementById('sizeValue').textContent = state.size;
+
+        // Density change requires full re-init
+        if (state.density !== particles.length / 5) {
+            initParticles();
+        } else {
+            updateParticleProperties();
+        }
+
+        if (isAuthReady) saveState();
+    }
+
+    // Attach listeners to control inputs
+    [densityInput, speedInput, sizeInput, colorInput].forEach(input => {
+        input.addEventListener('input', handleInputChange);
+    });
+    // Zoom slider handled inline in HTML but needs to trigger persistence too
+    zoomSlider.addEventListener('input', () => updateZoom(zoomSlider.value));
+
+    // --- Firestore Persistence ---
+
+    async function saveState() {
+        if (!db || !userId) return;
+
+        try {
+            const docPath = `artifacts/${appId}/users/${userId}/particleSettings/current`;
+            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'particleSettings', 'current');
+            
+            // LOGGING ADDED FOR DEBUGGING PERMISSIONS
+            console.log(`Attempting to save state for user: ${userId} to path: ${docPath}`);
+
+            // Store only essential UI/simulation state
+            const stateToSave = {
+                density: state.density,
+                maxSpeed: state.maxSpeed,
+                size: state.size,
+                color: state.color,
+                zoomLevel: state.zoomLevel,
+                isSidebarCollapsed: state.isSidebarCollapsed,
+                isContentCollapsed: state.isContentCollapsed,
+            };
+            
+            await setDoc(docRef, stateToSave, { merge: true });
+            // On successful save, reset listener attempts if it was successful after a previous failure.
+            listenerAttempts = 0; 
+            console.log("State saved successfully.");
+
+        } catch (error) {
+            console.error("Error saving state to Firestore:", error);
+        }
+    }
+
+    function setupFirestoreListener() {
+        if (!db || !userId) return;
+
+        const docPath = `artifacts/${appId}/users/${userId}/particleSettings/current`;
+        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'particleSettings', 'current');
+
+        // LOGGING ADDED FOR DEBUGGING PERMISSIONS
+        console.log(`Attempting to set up listener (Attempt ${listenerAttempts + 1}/${MAX_LISTENER_ATTEMPTS}) for user: ${userId} on path: ${docPath}`);
+
+        onSnapshot(docRef, (docSnap) => {
+            // Success: Reset attempts counter
+            listenerAttempts = 0;
+            if (docSnap.exists()) {
+                const loadedState = docSnap.data();
+                console.log("State loaded:", loadedState);
+                applyState(loadedState);
+            } else {
+                console.log("No saved state found. Starting new simulation.");
+                // Initialize default state and save it
+                handleInputChange();
+                resizeCanvas();
+                initParticles();
+                animate();
+            }
+        }, (error) => {
+            // This is the error handler that catches the "Missing or insufficient permissions" error
+            console.error("Error listening to Firestore (Permissions Issue Likely):", error);
+            
+            // --- FIX: Retry logic for persistent permission errors ---
+            if (listenerAttempts < MAX_LISTENER_ATTEMPTS) {
+                listenerAttempts++;
+                console.log(`Retrying Firestore listener in 2 seconds... (Attempt ${listenerAttempts})`);
+                setTimeout(setupFirestoreListener, 2000);
+            } else {
+                console.error("Max retries reached. Cannot establish persistent connection. Falling back to non-persistent local mode.");
+                // Fallback: Run the simulation locally if persistence fails entirely
+                if (!animationFrameId) {
+                    resizeCanvas();
+                    initParticles();
+                    animate();
+                }
+            }
+        });
+    }
+
+    function applyState(loadedState) {
+        // Update local state object
+        state = { ...state, ...loadedState };
+
+        // Update UI elements
+        densityInput.value = state.density;
+        speedInput.value = state.maxSpeed;
+        sizeInput.value = state.size;
+        colorInput.value = state.color;
+        zoomSlider.value = state.zoomLevel;
+
+        document.getElementById('densityValue').textContent = state.density;
+        document.getElementById('speedValue').textContent = state.maxSpeed.toFixed(1);
+        document.getElementById('sizeValue').textContent = state.size;
+        zoomLevelIndicator.textContent = `${state.zoomLevel.toFixed(1)}x`;
+
+        // Apply visual state (collapsible/sidebar)
+        toggleSidebar(state.isSidebarCollapsed);
+        toggleCollapsibleContent(state.isContentCollapsed);
+
+        // Rerun simulation initialization
+        resizeCanvas();
+        initParticles();
+        updateParticleProperties(); // Update properties of newly created particles
+        if (!animationFrameId) {
+            animate();
+        }
+    }
+
+    // If Firebase isn't available, run initialization immediately
+    if (!firebaseConfig) {
+        resizeCanvas();
+        initParticles();
+        animate();
+    }
+
+</script>
+</body>
+</html>

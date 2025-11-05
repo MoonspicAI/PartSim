@@ -3,566 +3,830 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Responsive Particle System Editor</title>
+    <title>D3.js Interactive Glitter Field with Axes and Clipping</title>
+    <!-- Load Tailwind CSS for styling the page -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght400;600;700&display=swap" rel="stylesheet">
+    <!-- Load D3.js library -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
-        /* Custom styles for better aesthetics and interaction */
+        /* Define the primary container for the visualization */
+        .glitter-container {
+            width: 100%;
+            height: 60vh; 
+            min-height: 350px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            background-color: #0b0c10; /* Very dark background */
+            overflow: hidden;
+            position: relative; /* Needed for absolute positioning of axes/rect */
+        }
+
+        /* Ensure the SVG scales to fill its container */
+        svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Use Inter font globally */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #0d1117; /* Dark background */
-            overflow: hidden; /* Prevent body scrolling */
-        }
-        .sidebar {
-            width: 300px;
-            max-width: 90vw;
-            transition: transform 0.3s ease-in-out;
-            transform: translateX(0);
-        }
-        .sidebar.collapsed {
-            transform: translateX(-100%);
-            width: 0;
-            padding: 0;
-            border: none;
-        }
-        .sidebar-container {
-             /* Fixed position off-screen when toggled */
-            transition: left 0.3s ease-in-out;
-            z-index: 20;
-            left: 0;
-        }
-        .collapsible-header {
-            cursor: pointer;
-            user-select: none;
-            transition: background-color 0.15s;
-        }
-        .collapsible-header:hover {
-            background-color: #1e2531;
-        }
-        .collapsible-content {
-            max-height: 80vh; /* Limit height for scrollability */
-            overflow-y: auto;
-            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
-            padding-top: 1rem;
-            padding-bottom: 1rem;
-        }
-        .collapsible-content.hidden {
-            max-height: 0;
-            overflow: hidden;
-            padding-top: 0;
-            padding-bottom: 0;
-        }
-        canvas {
-            cursor: crosshair;
         }
 
-        /* Focus state for range input */
-        input[type="range"]::-webkit-slider-thumb:focus {
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.5);
+        /* Custom styling for control buttons */
+        .control-btn {
+            @apply w-6 h-6 p-0 flex items-center justify-center bg-purple-100 text-purple-700 rounded-full font-bold text-lg leading-none transition duration-150 hover:bg-purple-300 active:bg-purple-500;
         }
-        .zoom-level-indicator {
-            min-width: 4rem;
-            text-align: center;
+
+        /* Custom styling for sliders (Tailwind only provides basic styles) */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb; /* Light gray track */
+            border-radius: 4px;
         }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #9f7aea; /* Purple thumb */
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(159, 122, 234, 0.8);
+        }
+
+        /* Style for D3 Axes */
+        .axis line, .axis path {
+            stroke: #7f8c8d; /* Grayish line color */
+        }
+        .axis text {
+            fill: #7f8c8d; /* Grayish text color */
+            font-size: 10px;
+        }
+        
+        /* NEW Style for collapsible headers: smaller and cleaner */
+        .section-header {
+            /* Reduced padding, smaller font, and purple hover */
+            @apply w-full flex justify-between items-center py-2 px-2 font-semibold text-base text-gray-700 transition duration-200 rounded hover:bg-purple-50 cursor-pointer;
+            margin-top: 8px; 
+            border-bottom: 1px solid #e5e7eb; /* Subtle separator line */
+        }
+        .section-icon {
+            @apply transition-transform duration-300 w-5 h-5 text-purple-500;
+        }
+        /* Rotates the right-arrow icon 90 degrees clockwise to make it a DOWN arrow (Closed state) */
+        .rotate-90 {
+            transform: rotate(90deg);
+        }
+        /* Icon is NOT rotated when the section is open (points RIGHT) */
+
+
     </style>
 </head>
-<body class="text-white">
-
-    <div id="app" class="flex h-screen w-full relative">
-
-        <!-- Sidebar for Controls -->
-        <div id="sidebar" class="sidebar absolute h-full bg-[#161b22] shadow-xl border-r border-[#30363d] p-4 flex flex-col">
-
-            <!-- Collapsible Section Header (The new button) -->
-            <div id="collapsibleHeader" class="collapsible-header px-2 py-3 mb-2 rounded-lg font-bold text-lg flex items-center justify-between border-b border-[#30363d]">
-                <span>Particle Parameters</span>
-                <svg id="collapseIcon" class="w-5 h-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+<!-- Use flex to create the side-by-side layout. h-screen and overflow-hidden prevent main scrolling. -->
+<body class="bg-gray-100 flex h-screen overflow-hidden">
+    
+    <!-- Control Panel (Fixed Width Sidebar on the LEFT) -->
+    <div id="control-panel" class="w-80 bg-white shadow-2xl p-6 border-r border-gray-200 overflow-y-auto">
+        
+        <h2 class="text-2xl font-bold mb-4 text-gray-800">Control Panel</h2>
+        
+        <!-- Title and Description Inputs -->
+        <div class="space-y-4 pb-6 border-b border-gray-200 mb-6">
+            <div>
+                <label for="canvasTitleInput" class="text-sm font-medium text-gray-700 block mb-1">Canvas Title</label>
+                <input type="text" id="canvasTitleInput" value="Interactive Skewed Glitter Field" class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-purple-500 focus:border-purple-500">
             </div>
-
-            <!-- Collapsible Content -->
-            <div id="collapsibleContent" class="collapsible-content space-y-4">
-                <!-- Density Slider -->
-                <div>
-                    <label for="density" class="block text-sm font-medium text-gray-400 mb-1">Density: <span id="densityValue">50</span></label>
-                    <input type="range" id="density" min="10" max="100" value="50" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer range-lg">
-                </div>
-
-                <!-- Speed Slider -->
-                <div>
-                    <label for="speed" class="block text-sm font-medium text-gray-400 mb-1">Max Speed: <span id="speedValue">2.5</span></label>
-                    <input type="range" id="speed" min="0.5" max="5" step="0.1" value="2.5" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
-                </div>
-
-                <!-- Size Slider -->
-                <div>
-                    <label for="size" class="block text-sm font-medium text-gray-400 mb-1">Size: <span id="sizeValue">3</span></label>
-                    <input type="range" id="size" min="1" max="10" value="3" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer">
-                </div>
-
-                <!-- Color Picker (simplified) -->
-                <div>
-                    <label for="color" class="block text-sm font-medium text-gray-400 mb-1">Base Color</label>
-                    <input type="color" id="color" value="#4F46E5" class="w-full h-10 p-1 bg-gray-700 rounded-lg border-none cursor-pointer">
-                </div>
-
-                <!-- Reset Button -->
-                <button onclick="resetSimulation()" class="w-full py-2 mt-4 bg-red-600 hover:bg-red-700 rounded-lg font-semibold shadow-lg transition duration-150">
-                    Reset Particles
-                </button>
-            </div>
-
-            <div class="mt-auto pt-4 border-t border-[#30363d]">
-                <!-- Zoom Control (New Feature) -->
-                <div class="mt-4 p-3 bg-[#1e2531] rounded-lg shadow-inner">
-                    <h3 class="font-bold text-sm mb-2 text-blue-400">Zoom Control</h3>
-                    <div class="flex items-center space-x-2">
-                        <!-- Zoom Out Button -->
-                        <button onclick="adjustZoom(-0.2)" class="p-1.5 bg-gray-600 hover:bg-gray-500 rounded-full transition duration-150 text-sm font-bold w-8 h-8 flex items-center justify-center">-</button>
-
-                        <!-- Slider -->
-                        <input type="range" id="zoomSlider" min="0.5" max="3.0" step="0.1" value="1.0" class="flex-grow h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" oninput="updateZoom(this.value)">
-
-                        <!-- Zoom In Button -->
-                        <button onclick="adjustZoom(0.2)" class="p-1.5 bg-gray-600 hover:bg-gray-500 rounded-full transition duration-150 text-sm font-bold w-8 h-8 flex items-center justify-center">+</button>
-                    </div>
-                    <div class="flex justify-between mt-2 text-xs text-gray-400">
-                        <span>0.5x</span>
-                        <span id="zoomLevelIndicator" class="zoom-level-indicator text-white font-medium">1.0x</span>
-                        <span>3.0x</span>
-                    </div>
-                </div>
+            <div>
+                <label for="canvasDescriptionInput" class="text-sm font-medium text-gray-700 block mb-1">Canvas Description</label>
+                <textarea id="canvasDescriptionInput" rows="2" class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-purple-500 focus:border-purple-500">Adjust the parameters in the control panel to see real-time particle dynamics.</textarea>
             </div>
         </div>
 
-        <!-- Main Canvas Area -->
-        <div class="flex-grow relative overflow-hidden">
-            <canvas id="particleCanvas" class="w-full h-full block"></canvas>
-
-            <!-- Floating Toggle Button for Mobile/Collapsed State -->
-            <button id="toggleButton" class="absolute top-4 left-4 p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-lg z-30 transition-transform duration-300">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+        <!-- Collapsible Section: Particle Parameters -->
+        <div class="mb-4">
+            <button class="section-header" data-target="particle-params" data-expanded="true">
+                Particle Parameters
+                <svg id="particle-params-icon" class="section-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
             </button>
+            <div id="particle-params" class="section-content space-y-6 pt-4 px-2" style="display: block;">
+                
+                <!-- H Spread ($S_H$) -->
+                <div class="space-y-2">
+                    <label for="hSpread" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>H Spread ($S_H$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="hSpread" data-action="decrement" class="control-btn">-</button>
+                            <span id="hSpreadValue" class="font-mono text-purple-600 w-10 text-right">400</span>
+                            <button data-target="hSpread" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="hSpread" min="100" max="800" value="400" step="10" class="w-full">
+                </div>
+
+                <!-- V Spread ($S_V$) -->
+                <div class="space-y-2">
+                    <label for="vSpread" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>V Spread ($S_V$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="vSpread" data-action="decrement" class="control-btn">-</button>
+                            <span id="vSpreadValue" class="font-mono text-purple-600 w-10 text-right">60</span>
+                            <button data-target="vSpread" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="vSpread" min="10" max="150" value="60" step="5" class="w-full">
+                </div>
+                
+                <!-- Radial Density Skew ($E$) -->
+                <div class="space-y-2">
+                    <label for="densitySkew" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Radial Density Skew ($E$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="densitySkew" data-action="decrement" class="control-btn">-</button>
+                            <span id="densitySkewValue" class="font-mono text-purple-600 w-10 text-right">3.0</span>
+                            <button data-target="densitySkew" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="densitySkew" min="1.0" max="10.0" value="3.0" step="0.1" class="w-full">
+                </div>
+
+                <!-- Burst Count ($N$) -->
+                <div class="space-y-2">
+                    <label for="particleCount" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Burst Count ($N$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="particleCount" data-action="decrement" class="control-btn">-</button>
+                            <span id="particleCountValue" class="font-mono text-purple-600 w-10 text-right">50</span>
+                            <button data-target="particleCount" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="particleCount" min="5" max="200" value="50" step="5" class="w-full">
+                </div>
+
+                <!-- Speed ($T$) -->
+                <div class="space-y-2">
+                    <label for="particleDuration" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Speed ($T$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="particleDuration" data-action="decrement" class="control-btn">-</button>
+                            <span id="particleDurationValue" class="font-mono text-purple-600 w-10 text-right">1.0s</span>
+                            <button data-target="particleDuration" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="particleDuration" min="500" max="3000" value="1000" step="100" class="w-full">
+                </div>
+
+                <!-- Color Diversity ($P_{sat}$) -->
+                <div class="space-y-2">
+                    <label for="colorDiversity" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Color Diversity ($P_{sat}$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="colorDiversity" data-action="decrement" class="control-btn">-</button>
+                            <span id="colorDiversityValue" class="font-mono text-purple-600 w-10 text-right">0%</span>
+                            <button data-target="colorDiversity" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="colorDiversity" min="0.0" max="1.0" value="0.0" step="0.05" class="w-full">
+                </div>
+
+                <!-- Center X-Offset ($\Delta x$) -->
+                <div class="space-y-2">
+                    <label for="xOffset" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Center X-Offset ($\Delta x$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="xOffset" data-action="decrement" class="control-btn">-</button>
+                            <span id="xOffsetValue" class="font-mono text-purple-600 w-10 text-right">0</span>
+                            <button data-target="xOffset" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="xOffset" min="-200" max="200" value="0" step="10" class="w-full">
+                </div>
+
+                <!-- Center Y-Offset ($\Delta y$) -->
+                <div class="space-y-2">
+                    <label for="yOffset" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Center Y-Offset ($\Delta y$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="yOffset" data-action="decrement" class="control-btn">-</button>
+                            <span id="yOffsetValue" class="font-mono text-purple-600 w-10 text-right">0</span>
+                            <button data-target="yOffset" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="yOffset" min="-100" max="100" value="0" step="10" class="w-full">
+                </div>
+
+                <!-- X Spread Bias ($\text{Bias}_X$) -->
+                <div class="space-y-2">
+                    <label for="xBias" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>X Spread Bias ($\text{Bias}_X$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="xBias" data-action="decrement" class="control-btn">-</button>
+                            <span id="xBiasValue" class="font-mono text-purple-600 w-10 text-right">0.0</span>
+                            <button data-target="xBias" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="xBias" min="-1.0" max="1.0" value="0.0" step="0.1" class="w-full">
+                </div>
+
+                <!-- Y Spread Bias ($\text{Bias}_Y$) -->
+                <div class="space-y-2">
+                    <label for="yBias" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Y Spread Bias ($\text{Bias}_Y$)</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="yBias" data-action="decrement" class="control-btn">-</button>
+                            <span id="yBiasValue" class="font-mono text-purple-600 w-10 text-right">0.0</span>
+                            <button data-target="yBias" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="yBias" min="-1.0" max="1.0" value="0.0" step="0.1" class="w-full">
+                </div>
+            </div>
         </div>
+
+        <!-- Collapsible Section: Boundary Object -->
+        <div class="mb-4">
+            <button class="section-header" data-target="boundary-object" data-expanded="false">
+                Boundary Object (Clipping)
+                <svg id="boundary-object-icon" class="section-icon rotate-90" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <div id="boundary-object" class="section-content space-y-4 pt-4 px-2" style="display: none;">
+                
+                <div class="flex items-center justify-between">
+                    <label for="enableRectangle" class="text-sm font-medium text-gray-700">Enable Rectangle Boundary</label>
+                    <input type="checkbox" id="enableRectangle" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                </div>
+
+                <!-- Rectangle Width -->
+                <div class="space-y-2">
+                    <label for="rectWidth" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Boundary Width</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="rectWidth" data-action="decrement" class="control-btn">-</button>
+                            <span id="rectWidthValue" class="font-mono text-purple-600 w-10 text-right">500</span>
+                            <button data-target="rectWidth" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="rectWidth" min="100" max="900" value="500" step="10" class="w-full">
+                </div>
+
+                <!-- Rectangle Height -->
+                <div class="space-y-2">
+                    <label for="rectHeight" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>Boundary Height</span>
+                        <div class="flex items-center space-x-2">
+                            <button data-target="rectHeight" data-action="decrement" class="control-btn">-</button>
+                            <span id="rectHeightValue" class="font-mono text-purple-600 w-10 text-right">200</span>
+                            <button data-target="rectHeight" data-action="increment" class="control-btn">+</button>
+                        </div>
+                    </label>
+                    <input type="range" id="rectHeight" min="50" max="300" value="200" step="10" class="w-full">
+                </div>
+            </div>
+        </div>
+
+        <!-- Collapsible Section: Visualization Axes -->
+        <div class="mb-4">
+            <button class="section-header" data-target="vis-axes" data-expanded="false">
+                Visualization Axes
+                <svg id="vis-axes-icon" class="section-icon rotate-90" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+            <div id="vis-axes" class="section-content space-y-4 pt-4 px-2" style="display: none;">
+                
+                <!-- X-Axis Controls -->
+                <h4 class="text-md font-medium text-purple-600 border-b pb-1 mb-2">Horizontal (X) Axis</h4>
+                <div class="flex items-center justify-between mb-2">
+                    <label for="enableXAxis" class="text-sm font-medium text-gray-700">Enable X-Axis</label>
+                    <input type="checkbox" id="enableXAxis" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                </div>
+                <div>
+                    <label for="xAxisUnit" class="text-xs font-medium text-gray-700 block mb-1">Unit Label</label>
+                    <select id="xAxisUnit" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="">(No Label)</option>
+                        <option value="Years">Years</option>
+                        <option value="Integers" selected>Integers</option>
+                        <option value="Meters">Meters</option>
+                    </select>
+                </div>
+                <div class="flex space-x-3">
+                    <div class="flex-1">
+                        <label for="xAxisMin" class="text-xs font-medium text-gray-700 block mb-1">Min Value</label>
+                        <input type="text" id="xAxisMin" value="-500" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                    </div>
+                    <div class="flex-1">
+                        <label for="xAxisMax" class="text-xs font-medium text-gray-700 block mb-1">Max Value</label>
+                        <input type="text" id="xAxisMax" value="500" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                    </div>
+                </div>
+
+                <!-- Y-Axis Controls -->
+                <h4 class="text-md font-medium text-purple-600 border-b pb-1 my-3">Vertical (Y) Axis</h4>
+                <div class="flex items-center justify-between mb-2">
+                    <label for="enableYAxis" class="text-sm font-medium text-gray-700">Enable Y-Axis</label>
+                    <input type="checkbox" id="enableYAxis" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                </div>
+                <div>
+                    <label for="yAxisUnit" class="text-xs font-medium text-gray-700 block mb-1">Unit Label</label>
+                    <select id="yAxisUnit" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="">(No Label)</option>
+                        <option value="Percentage">Percentage</option>
+                        <option value="Temperature">Temperature ($\deg\text{C}$)</option>
+                        <option value="Integers" selected>Integers</option>
+                    </select>
+                </div>
+                <div class="flex space-x-3">
+                    <div class="flex-1">
+                        <label for="yAxisMin" class="text-xs font-medium text-gray-700 block mb-1">Min Value</label>
+                        <input type="text" id="yAxisMin" value="-175" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                    </div>
+                    <div class="flex-1">
+                        <label for="yAxisMax" class="text-xs font-medium text-gray-700 block mb-1">Max Value</label>
+                        <input type="text" id="yAxisMax" value="175" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
     </div>
 
-<script type="module">
-    // --- Firebase/Auth Setup (Mandatory in Canvas Environment) ---
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, onSnapshot, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    setLogLevel('Debug');
-
-    // Global variables provided by the Canvas environment
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-particle-app';
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-    let app;
-    let db;
-    let auth;
-    let userId;
-    let isAuthReady = false;
-    
-    // --- New variables for retry logic ---
-    let listenerAttempts = 0;
-    const MAX_LISTENER_ATTEMPTS = 3;
-
-
-    if (firebaseConfig) {
-        app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
-        auth = getAuth(app);
-
-        async function authenticate() {
-            try {
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Firebase Auth Error:", error);
-            }
-        }
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                userId = user.uid;
-                console.log("User signed in with UID:", userId);
-            } else {
-                // Should not happen if custom token or anonymous sign-in succeeds
-                userId = crypto.randomUUID();
-                console.log("No authenticated user, using temporary ID:", userId);
-            }
-            isAuthReady = true;
-            // Start listening for state after auth is ready
-            setupFirestoreListener();
-        });
-
-        authenticate();
-    } else {
-        console.warn("Firebase config not found. State will not be persisted.");
-        userId = crypto.randomUUID();
-        isAuthReady = true;
-    }
-
-    // --- Particle System and UI Logic ---
-
-    const canvas = document.getElementById('particleCanvas');
-    const ctx = canvas.getContext('2d');
-    const sidebar = document.getElementById('sidebar');
-    const toggleButton = document.getElementById('toggleButton');
-    const collapsibleHeader = document.getElementById('collapsibleHeader');
-    const collapsibleContent = document.getElementById('collapsibleContent');
-    const collapseIcon = document.getElementById('collapseIcon');
-
-    // State object, which will be synced with Firestore
-    let state = {
-        density: 50,
-        maxSpeed: 2.5,
-        size: 3,
-        color: '#4F46E5',
-        zoomLevel: 1.0,
-        isSidebarCollapsed: false,
-        isContentCollapsed: false,
-    };
-
-    // DOM elements for parameters and zoom
-    const densityInput = document.getElementById('density');
-    const speedInput = document.getElementById('speed');
-    const sizeInput = document.getElementById('size');
-    const colorInput = document.getElementById('color');
-    const zoomSlider = document.getElementById('zoomSlider');
-    const zoomLevelIndicator = document.getElementById('zoomLevelIndicator');
-
-    let particles = [];
-    let animationFrameId = null;
-
-    // --- UI Interaction Functions ---
-
-    // 1. Sidebar/Collapsible Logic
-    function toggleSidebar(shouldCollapse) {
-        const collapsed = shouldCollapse !== undefined ? shouldCollapse : !state.isSidebarCollapsed;
-        state.isSidebarCollapsed = collapsed;
-        sidebar.classList.toggle('collapsed', collapsed);
-        toggleButton.classList.toggle('rotate-180', !collapsed); // Simple transition for floating button
-        // Persist change
-        if (isAuthReady) saveState();
-    }
-
-    function toggleCollapsibleContent(shouldCollapse) {
-        const collapsed = shouldCollapse !== undefined ? shouldCollapse : !state.isContentCollapsed;
-        state.isContentCollapsed = collapsed;
-        collapsibleContent.classList.toggle('hidden', collapsed);
-        collapseIcon.classList.toggle('rotate-180', collapsed);
-        // Persist change
-        if (isAuthReady) saveState();
-    }
-
-    // Event listeners for UI
-    toggleButton.addEventListener('click', () => toggleSidebar());
-    collapsibleHeader.addEventListener('click', () => toggleCollapsibleContent());
-
-
-    // 2. Zoom Control Logic
-    const MIN_ZOOM = 0.5;
-    const MAX_ZOOM = 3.0;
-    const ZOOM_STEP = 0.1;
-
-    function updateZoom(newZoom) {
-        let zoom = parseFloat(newZoom);
-        state.zoomLevel = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom));
-
-        // Update UI elements
-        zoomSlider.value = state.zoomLevel;
-        zoomLevelIndicator.textContent = `${state.zoomLevel.toFixed(1)}x`;
-
-        // Persist change
-        if (isAuthReady) saveState();
-    }
-
-    function adjustZoom(delta) {
-        const newZoom = state.zoomLevel + delta;
-        updateZoom(newZoom);
-    }
-
-    // Mouse wheel zoom on canvas
-    canvas.addEventListener('wheel', (e) => {
-        e.preventDefault(); // Prevent page scrolling
-        // Adjust sensitivity for scroll wheel
-        const scrollDelta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-        adjustZoom(scrollDelta);
-    });
-
-    // --- Particle Class and Simulation Logic ---
-
-    class Particle {
-        constructor(x, y, vx, vy, color, size) {
-            this.x = x;
-            this.y = y;
-            this.vx = vx;
-            this.vy = vy;
-            this.color = color;
-            this.size = size;
-        }
-
-        update() {
-            this.x += this.vx;
-            this.y += this.vy;
-
-            // Simple boundary bounce
-            if (this.x - this.size < 0 || this.x + this.size > canvas.width) {
-                this.vx *= -1;
-                // Correct position to prevent sticking
-                if (this.x - this.size < 0) this.x = this.size;
-                if (this.x + this.size > canvas.width) this.x = canvas.width - this.size;
-            }
-            if (this.y - this.size < 0 || this.y + this.size > canvas.height) {
-                this.vy *= -1;
-                // Correct position
-                if (this.y - this.size < 0) this.y = this.size;
-                if (this.y + this.size > canvas.height) this.y = canvas.height - this.size;
-            }
-        }
-
-        draw(ctx) {
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.size * state.zoomLevel, 0, Math.PI * 2);
-            ctx.fillStyle = this.color;
-            ctx.fill();
-        }
-    }
-
-    function initParticles() {
-        particles = [];
-        const numParticles = state.density * 5; // Scaling factor
-        for (let i = 0; i < numParticles; i++) {
-            const x = Math.random() * canvas.width;
-            const y = Math.random() * canvas.height;
-            const angle = Math.random() * Math.PI * 2;
-            const speed = Math.random() * state.maxSpeed + 0.5;
-            const vx = Math.cos(angle) * speed;
-            const vy = Math.sin(angle) * speed;
-            particles.push(new Particle(x, y, vx, vy, state.color, state.size));
-        }
-    }
-
-    function resetSimulation() {
-        if (animationFrameId) {
-            // Corrected typo from animationFrameFrameId to animationFrameId
-            cancelAnimationFrame(animationFrameId); 
-        }
-        initParticles();
-        animate();
-    }
-
-    function animate() {
-        // Clear canvas
-        ctx.fillStyle = 'rgba(13, 17, 23, 0.5)'; // Semi-transparent for subtle trails
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // Apply Zoom Transformation
-        // The transformation is applied to the context, affecting all subsequent drawing calls.
-        ctx.save();
+    <!-- Visualization Area (Takes up all available space) -->
+    <div id="main-content" class="flex-grow p-8 flex flex-col items-center justify-center overflow-auto">
         
-        // 1. Translate to center
-        ctx.translate(canvas.width / 2, canvas.height / 2);
+        <!-- Dynamic Title and Description -->
+        <div class="text-center mb-8 w-full max-w-4xl">
+            <h1 id="canvas-title-display" class="text-3xl sm:text-4xl font-extrabold text-purple-700">Interactive Skewed Glitter Field</h1>
+            <p id="canvas-description-display" class="text-gray-600 mt-2 text-lg">Adjust the parameters in the control panel to see real-time particle dynamics.</p>
+        </div>
+        
+        <!-- D3 Visualization Container -->
+        <div id="d3-container" class="glitter-container w-full max-w-4xl">
+            <!-- D3 SVG will be appended here -->
+        </div>
+    </div>
+    
+    <script>
+        // --- D3.js Logic for Interactive Elliptical Glitter Particles ---
 
-        // 2. Apply scale (Zoom)
-        ctx.scale(state.zoomLevel, state.zoomLevel);
+        const CONTAINER_HEIGHT = 350; // Base height for calculating aspect ratio in viewBox
+        const VIEWBOX_WIDTH = 1000; 
+        const MARGIN = { top: 20, right: 20, bottom: 40, left: 50 }; // Margin for axes
+        const DRAW_WIDTH = VIEWBOX_WIDTH - MARGIN.left - MARGIN.right;
+        const DRAW_HEIGHT = CONTAINER_HEIGHT - MARGIN.top - MARGIN.bottom;
 
-        // 3. Translate back to maintain origin reference
-        ctx.translate(-canvas.width / 2, -canvas.height / 2);
+        // Initial constants
+        const CENTER_RADIUS = 40; 
+        
+        // Base center point (fixed)
+        const BASE_CENTER_X = MARGIN.left + DRAW_WIDTH / 2;
+        const BASE_CENTER_Y = MARGIN.top + DRAW_HEIGHT / 2;
 
-        // Update and Draw Particles
-        particles.forEach(p => {
-            p.update();
-            p.draw(ctx);
-        });
+        // Dynamic State Variables (linked to slider default values)
+        let hSpread = 400; 
+        let vSpread = 60;  
+        let DENSITY_SKEW_EXPONENT = 3.0; 
+        let particleCount = 50; 
+        let particleDuration = 1000; 
+        let colorDiversity = 0.0;
+        let xOffset = 0; 
+        let yOffset = 0; 
+        let xBias = 0.0; 
+        let yBias = 0.0; 
 
-        // Restore context to undo the transformations
-        ctx.restore();
+        // Boundary Object State
+        let isRectangleVisible = false;
+        let rectWidth = 500;
+        let rectHeight = 200;
 
-        animationFrameId = requestAnimationFrame(animate);
-    }
+        // Axis State
+        let isXAxisVisible = false;
+        let isYAxisVisible = false;
+        let xAxisMin = -500;
+        let xAxisMax = 500;
+        let yAxisMin = -175;
+        let yAxisMax = 175;
+        let xAxisUnit = 'Integers';
+        let yAxisUnit = 'Integers';
 
-    // --- Initialization and Event Handling ---
 
-    function resizeCanvas() {
-        const rect = canvas.parentElement.getBoundingClientRect();
-        canvas.width = rect.width;
-        canvas.height = rect.height;
-    }
+        // Dynamic Center Coordinates (Effective Center of the Object)
+        let centerX = BASE_CENTER_X;
+        let centerY = BASE_CENTER_Y;
 
-    // Debounce window resize
-    let resizeTimer;
-    window.addEventListener('resize', () => {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => {
-            resizeCanvas();
-            // Re-initialize particles on resize to ensure they fit the new dimensions
-            initParticles();
-        }, 200);
-    });
+        let particleInterval;
 
-    // Update particles' properties based on state changes
-    function updateParticleProperties() {
-        particles.forEach(p => {
-            p.color = state.color;
-            p.size = state.size;
-            // Re-apply max speed limit (optional, simple systems often don't need this)
-            const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-            if (speed > state.maxSpeed) {
-                const ratio = state.maxSpeed / speed;
-                p.vx *= ratio;
-                p.vy *= ratio;
+        // 1. Initialize SVG container
+        const container = d3.select("#d3-container");
+
+        const svg = container.append("svg")
+            .attr("viewBox", `0 0 ${VIEWBOX_WIDTH} ${CONTAINER_HEIGHT}`)
+            .attr("preserveAspectRatio", "xMidYMid meet");
+
+        // Main group for transformations (to apply margins)
+        const g = svg.append("g")
+            .attr("transform", `translate(${MARGIN.left}, ${MARGIN.top})`);
+        
+        // Group for axes (placed outside the main drawing group 'g' to handle margins correctly)
+        const axisGroup = svg.append("g");
+        
+        // 2. Add the Central Object
+        const centralObject = g.append("circle")
+            .attr("r", CENTER_RADIUS)
+            .attr("fill", "#2c3e50") 
+            .attr("stroke", "#7f8c8d") 
+            .attr("stroke-width", 2)
+            .attr("opacity", 0.9);
+
+        // Add the Boundary Rectangle (initially hidden)
+        const boundaryRect = g.append("rect")
+            .attr("fill", "none")
+            .attr("stroke", "#e74c3c")
+            .attr("stroke-dasharray", "5,5")
+            .attr("stroke-width", 2)
+            .style("display", "none"); 
+
+        // Add X and Y axis groups
+        const xAxisGroup = axisGroup.append("g")
+            .attr("class", "x axis")
+            .attr("transform", `translate(${MARGIN.left}, ${CONTAINER_HEIGHT - MARGIN.bottom})`);
+        
+        const yAxisGroup = axisGroup.append("g")
+            .attr("class", "y axis")
+            .attr("transform", `translate(${MARGIN.left}, ${MARGIN.top})`);
+        
+        // Axis Labels
+        const xAxisLabel = axisGroup.append("text")
+            .attr("class", "axis-label")
+            .attr("transform", `translate(${VIEWBOX_WIDTH / 2}, ${CONTAINER_HEIGHT - 5})`)
+            .style("text-anchor", "middle")
+            .attr("fill", "#7f8c8d");
+
+        const yAxisLabel = axisGroup.append("text")
+            .attr("class", "axis-label")
+            .attr("transform", `translate(15, ${CONTAINER_HEIGHT / 2}) rotate(-90)`)
+            .style("text-anchor", "middle")
+            .attr("fill", "#7f8c8d");
+
+
+        // 3. Coordinate Systems / Scales
+        let xScale, yScale;
+
+        function updateScales() {
+            try {
+                // Parse Min/Max values safely
+                const xMin = parseFloat(document.getElementById('xAxisMin').value) || xAxisMin;
+                const xMax = parseFloat(document.getElementById('xAxisMax').value) || xAxisMax;
+                const yMin = parseFloat(document.getElementById('yAxisMin').value) || yAxisMin;
+                const yMax = parseFloat(document.getElementById('yAxisMax').value) || yAxisMax;
+                
+                // Set global state for use in particle generation
+                xAxisMin = xMin; xAxisMax = xMax;
+                yAxisMin = yMin; yAxisMax = yMax;
+                
+                // Define Scales (map data range to pixel range in the drawing area)
+                xScale = d3.scaleLinear().domain([xMin, xMax]).range([0, DRAW_WIDTH]);
+                yScale = d3.scaleLinear().domain([yMin, yMax]).range([DRAW_HEIGHT, 0]); // Note: Y is inverted in SVG
+                
+                // Update axis rendering
+                updateAxes();
+
+            } catch(e) {
+                console.error("Error updating scales:", e);
             }
-        });
-    }
+        }
+        
+        // 4. Update Function for Axes
+        function updateAxes() {
+            const xUnit = document.getElementById('xAxisUnit').value;
+            const yUnit = document.getElementById('yAxisUnit').value;
+            
+            // X-Axis
+            if (isXAxisVisible) {
+                const xAxis = d3.axisBottom(xScale).ticks(5);
+                xAxisGroup.call(xAxis).style("display", null);
+                xAxisLabel.text(xUnit).style("display", null);
+            } else {
+                xAxisGroup.style("display", "none");
+                xAxisLabel.style("display", "none");
+            }
 
-    // Update state from UI
-    function handleInputChange() {
-        state.density = parseInt(densityInput.value);
-        state.maxSpeed = parseFloat(speedInput.value);
-        state.size = parseInt(sizeInput.value);
-        state.color = colorInput.value;
-
-        document.getElementById('densityValue').textContent = state.density;
-        document.getElementById('speedValue').textContent = state.maxSpeed.toFixed(1);
-        document.getElementById('sizeValue').textContent = state.size;
-
-        // Density change requires full re-init
-        if (state.density !== particles.length / 5) {
-            initParticles();
-        } else {
-            updateParticleProperties();
+            // Y-Axis
+            if (isYAxisVisible) {
+                const yAxis = d3.axisLeft(yScale).ticks(5);
+                yAxisGroup.call(yAxis).style("display", null);
+                yAxisLabel.text(yUnit).style("display", null);
+            } else {
+                yAxisGroup.style("display", "none");
+                yAxisLabel.style("display", "none");
+            }
         }
 
-        if (isAuthReady) saveState();
-    }
+        // 5. Update Function for Central Object and Rectangle Boundary
+        function updatePositions() {
+            // Calculate new effective center based on offsets, relative to the drawing area center
+            centerX = DRAW_WIDTH / 2 + xOffset;
+            centerY = DRAW_HEIGHT / 2 + yOffset;
 
-    // Attach listeners to control inputs
-    [densityInput, speedInput, sizeInput, colorInput].forEach(input => {
-        input.addEventListener('input', handleInputChange);
-    });
-    // Zoom slider handled inline in HTML but needs to trigger persistence too
-    zoomSlider.addEventListener('input', () => updateZoom(zoomSlider.value));
-
-    // --- Firestore Persistence ---
-
-    async function saveState() {
-        if (!db || !userId) return;
-
-        try {
-            const docPath = `artifacts/${appId}/users/${userId}/particleSettings/current`;
-            const docRef = doc(db, 'artifacts', appId, 'users', userId, 'particleSettings', 'current');
+            // Immediately move the central object (which is in group 'g')
+            centralObject
+                .attr("cx", centerX)
+                .attr("cy", centerY);
             
-            // LOGGING ADDED FOR DEBUGGING PERMISSIONS
-            console.log(`Attempting to save state for user: ${userId} to path: ${docPath}`);
-
-            // Store only essential UI/simulation state
-            const stateToSave = {
-                density: state.density,
-                maxSpeed: state.maxSpeed,
-                size: state.size,
-                color: state.color,
-                zoomLevel: state.zoomLevel,
-                isSidebarCollapsed: state.isSidebarCollapsed,
-                isContentCollapsed: state.isContentCollapsed,
-            };
-            
-            await setDoc(docRef, stateToSave, { merge: true });
-            // On successful save, reset listener attempts if it was successful after a previous failure.
-            listenerAttempts = 0; 
-            console.log("State saved successfully.");
-
-        } catch (error) {
-            console.error("Error saving state to Firestore:", error);
+            // Update the boundary rectangle as well
+            updateRectangle();
         }
-    }
 
-    function setupFirestoreListener() {
-        if (!db || !userId) return;
+        function updateRectangle() {
+            // Check boundaries (centered rectangle, in group 'g')
+            const rectX = centerX - rectWidth / 2;
+            const rectY = centerY - rectHeight / 2;
 
-        const docPath = `artifacts/${appId}/users/${userId}/particleSettings/current`;
-        const docRef = doc(db, 'artifacts', appId, 'users', userId, 'particleSettings', 'current');
-
-        // LOGGING ADDED FOR DEBUGGING PERMISSIONS
-        console.log(`Attempting to set up listener (Attempt ${listenerAttempts + 1}/${MAX_LISTENER_ATTEMPTS}) for user: ${userId} on path: ${docPath}`);
-
-        onSnapshot(docRef, (docSnap) => {
-            // Success: Reset attempts counter
-            listenerAttempts = 0;
-            if (docSnap.exists()) {
-                const loadedState = docSnap.data();
-                console.log("State loaded:", loadedState);
-                applyState(loadedState);
+            if (isRectangleVisible) {
+                boundaryRect
+                    .attr("x", rectX)
+                    .attr("y", rectY)
+                    .attr("width", rectWidth)
+                    .attr("height", rectHeight)
+                    .style("display", null);
             } else {
-                console.log("No saved state found. Starting new simulation.");
-                // Initialize default state and save it
-                handleInputChange();
-                resizeCanvas();
-                initParticles();
-                animate();
+                boundaryRect.style("display", "none");
             }
-        }, (error) => {
-            // This is the error handler that catches the "Missing or insufficient permissions" error
-            console.error("Error listening to Firestore (Permissions Issue Likely):", error);
             
-            // --- FIX: Retry logic for persistent permission errors ---
-            if (listenerAttempts < MAX_LISTENER_ATTEMPTS) {
-                listenerAttempts++;
-                console.log(`Retrying Firestore listener in 2 seconds... (Attempt ${listenerAttempts})`);
-                setTimeout(setupFirestoreListener, 2000);
-            } else {
-                console.error("Max retries reached. Cannot establish persistent connection. Falling back to non-persistent local mode.");
-                // Fallback: Run the simulation locally if persistence fails entirely
-                if (!animationFrameId) {
-                    resizeCanvas();
-                    initParticles();
-                    animate();
+            // Immediately restart glitter to apply the new clipping boundary
+            startGlitter();
+        }
+
+
+        // 6. Particle Data Generation
+        function generateParticles(count) {
+            const particles = [];
+            const saturation = 100 * colorDiversity; 
+
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * 2 * Math.PI;
+                const cosAngle = Math.cos(angle);
+                const sinAngle = Math.sin(angle);
+                
+                // Calculate Effective Spread based on Bias
+                const hSpreadEff = hSpread * (1 + xBias * Math.sign(cosAngle));
+                const vSpreadEff = vSpread * (1 + yBias * Math.sign(sinAngle));
+
+                // Density Bias Calculation (Skewed Factor D)
+                const biasedFactor = Math.pow(Math.random(), DENSITY_SKEW_EXPONENT); 
+
+                // Calculate raw coordinates (Distance D * direction * effective spread)
+                const rawX = biasedFactor * cosAngle * hSpreadEff;
+                const rawY = biasedFactor * sinAngle * vSpreadEff;
+
+                // The final position is just the object center plus the raw offset. (inside group 'g')
+                const x = centerX + rawX;
+                const y = centerY + rawY;
+                
+                // --- BOUNDARY CLIPPING LOGIC (CRITICAL) ---
+                if (isRectangleVisible) {
+                    const rectXMin = centerX - rectWidth / 2;
+                    const rectYMin = centerY - rectHeight / 2;
+                    const rectXMax = centerX + rectWidth / 2;
+                    const rectYMax = centerY + rectHeight / 2;
+
+                    // If particle is outside the rectangle, skip it.
+                    if (x < rectXMin || x > rectXMax || y < rectYMin || y > rectYMax) {
+                        continue; 
+                    }
                 }
+                // ---------------------------------
+                
+                const FIXED_RADIUS = 2.0; 
+                const FIXED_OPACITY = 0.9; 
+
+                particles.push({
+                    id: Date.now() + i,
+                    x: x,
+                    y: y,
+                    r: FIXED_RADIUS, 
+                    initialOpacity: FIXED_OPACITY, 
+                    color: `hsl(${Math.random() * 360}, ${saturation}%, 75%)` 
+                });
             }
-        });
-    }
-
-    function applyState(loadedState) {
-        // Update local state object
-        state = { ...state, ...loadedState };
-
-        // Update UI elements
-        densityInput.value = state.density;
-        speedInput.value = state.maxSpeed;
-        sizeInput.value = state.size;
-        colorInput.value = state.color;
-        zoomSlider.value = state.zoomLevel;
-
-        document.getElementById('densityValue').textContent = state.density;
-        document.getElementById('speedValue').textContent = state.maxSpeed.toFixed(1);
-        document.getElementById('sizeValue').textContent = state.size;
-        zoomLevelIndicator.textContent = `${state.zoomLevel.toFixed(1)}x`;
-
-        // Apply visual state (collapsible/sidebar)
-        toggleSidebar(state.isSidebarCollapsed);
-        toggleCollapsibleContent(state.isContentCollapsed);
-
-        // Rerun simulation initialization
-        resizeCanvas();
-        initParticles();
-        updateParticleProperties(); // Update properties of newly created particles
-        if (!animationFrameId) {
-            animate();
+            return particles;
         }
-    }
 
-    // If Firebase isn't available, run initialization immediately
-    if (!firebaseConfig) {
-        resizeCanvas();
-        initParticles();
-        animate();
-    }
+        // 7. Animation Function: Defines the fast lifecycle of a single particle
+        function animateParticle(selection) {
+            const duration = particleDuration;
+            
+            selection
+                .attr("opacity", d => d.initialOpacity) 
+                .attr("r", 0) 
+                .attr("fill", d => d.color)
 
-</script>
+                // PHASE 1: SHOW UP (10% of duration)
+                .transition().duration(duration * 0.1) 
+                .ease(d3.easeQuadOut)
+                .attr("r", d => d.r) 
+                .attr("opacity", d => d.initialOpacity) 
+
+                // PHASE 2 & 3: GLOW & VANISH
+                .transition().duration(duration * 0.9) // 60% glow + 30% vanish
+                .ease(d3.easeQuadIn)
+                .attr("r", 0) 
+                .attr("opacity", 0) 
+
+                // Remove the element from the DOM
+                .on("end", function() {
+                    d3.select(this).remove();
+                });
+        }
+
+        // 8. Update/Render function (Particles)
+        function updateParticles() {
+            const newParticles = generateParticles(particleCount);
+
+            // Bind new particle data to the main group 'g'
+            const particleSelection = g.selectAll(".glitter-particle")
+                .data(newParticles, d => d.id);
+
+            // ENTER selection: Append new circles and start animation
+            particleSelection.enter()
+                .append("circle")
+                .attr("class", "glitter-particle") 
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .call(animateParticle); 
+        }
+
+        // 9. Interval Control
+        function startGlitter() {
+            if (particleInterval) {
+                clearInterval(particleInterval);
+            }
+            updateParticles();
+            const intervalMs = Math.min(particleDuration * 0.25, 150);
+            particleInterval = setInterval(updateParticles, intervalMs); 
+        }
+
+        // 10. Slider Interaction Mapping
+        const sliders = [
+            { id: 'hSpread', variable: 'hSpread', update: startGlitter, format: v => v.toFixed(0) },
+            { id: 'vSpread', variable: 'vSpread', update: startGlitter, format: v => v.toFixed(0) },
+            { id: 'densitySkew', variable: 'DENSITY_SKEW_EXPONENT', update: startGlitter, format: v => v.toFixed(1) },
+            { id: 'particleCount', variable: 'particleCount', update: startGlitter, format: v => v.toFixed(0) },
+            { id: 'particleDuration', variable: 'particleDuration', update: startGlitter, format: v => (v / 1000).toFixed(1) + 's' },
+            { id: 'colorDiversity', variable: 'colorDiversity', update: startGlitter, format: v => (v * 100).toFixed(0) + '%' },
+            { id: 'xOffset', variable: 'xOffset', update: updatePositions, format: v => v.toFixed(0) },
+            { id: 'yOffset', variable: 'yOffset', update: updatePositions, format: v => v.toFixed(0) },
+            { id: 'xBias', variable: 'xBias', update: startGlitter, format: v => v.toFixed(1) },
+            { id: 'yBias', variable: 'yBias', update: startGlitter, format: v => v.toFixed(1) },
+            { id: 'rectWidth', variable: 'rectWidth', update: updatePositions, format: v => v.toFixed(0) },
+            { id: 'rectHeight', variable: 'rectHeight', update: updatePositions, format: v => v.toFixed(0) }
+        ];
+
+        // Helper function to update the global state and UI for a slider
+        function updateSlider(id, value) {
+            const sliderConfig = sliders.find(s => s.id === id);
+            if (!sliderConfig) return;
+
+            const element = document.getElementById(id);
+            const valueSpan = document.getElementById(id + 'Value');
+            
+            // Clamp value to min/max
+            const min = parseFloat(element.min);
+            const max = parseFloat(element.max);
+            value = Math.max(min, Math.min(max, value));
+
+            // Adjust value to nearest step to prevent floating point issues
+            const step = parseFloat(element.step || 1);
+            const precision = step.toString().split('.')[1]?.length || 0;
+            value = parseFloat(value.toFixed(precision));
+            
+
+            // Update DOM and internal state
+            element.value = value;
+            if (valueSpan) {
+                valueSpan.textContent = sliderConfig.format(value);
+            }
+
+            // Update global variable
+            if (sliderConfig.variable === 'hSpread') hSpread = value;
+            else if (sliderConfig.variable === 'vSpread') vSpread = value;
+            else if (sliderConfig.variable === 'DENSITY_SKEW_EXPONENT') DENSITY_SKEW_EXPONENT = value;
+            else if (sliderConfig.variable === 'particleCount') particleCount = value;
+            else if (sliderConfig.variable === 'particleDuration') particleDuration = value;
+            else if (sliderConfig.variable === 'colorDiversity') colorDiversity = value; 
+            else if (sliderConfig.variable === 'xOffset') xOffset = value; 
+            else if (sliderConfig.variable === 'yOffset') yOffset = value; 
+            else if (sliderConfig.variable === 'xBias') xBias = value; 
+            else if (sliderConfig.variable === 'yBias') yBias = value; 
+            else if (sliderConfig.variable === 'rectWidth') rectWidth = value;
+            else if (sliderConfig.variable === 'rectHeight') rectHeight = value;
+            
+            // Execute update function
+            if (sliderConfig.update) {
+                sliderConfig.update();
+            }
+        }
+
+        // 11. Collapsible/Event Listeners Initialization
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // Collapsible Section Logic
+            document.querySelectorAll('.section-header').forEach(header => {
+                header.addEventListener('click', () => {
+                    const targetId = header.dataset.target;
+                    const content = document.getElementById(targetId);
+                    const icon = document.getElementById(targetId + '-icon');
+                    
+                    if (content.style.display === 'none' || content.style.display === '') {
+                        content.style.display = 'block';
+                        icon.classList.remove('rotate-90'); // Show right arrow (open)
+                        header.dataset.expanded = 'true';
+                    } else {
+                        content.style.display = 'none';
+                        icon.classList.add('rotate-90'); // Show down arrow (closed)
+                        header.dataset.expanded = 'false';
+                    }
+                });
+            });
+
+
+            // Title and Description Listeners
+            const titleInput = document.getElementById('canvasTitleInput');
+            const descriptionInput = document.getElementById('canvasDescriptionInput');
+            const titleDisplay = document.getElementById('canvas-title-display');
+            const descriptionDisplay = document.getElementById('canvas-description-display');
+
+            const updateTitleDescription = () => {
+                titleDisplay.textContent = titleInput.value;
+                descriptionDisplay.textContent = descriptionInput.value;
+            };
+            titleInput.addEventListener('input', updateTitleDescription);
+            descriptionInput.addEventListener('input', updateTitleDescription);
+            updateTitleDescription(); // Initial display
+
+
+            // Slider and Button Listeners
+            sliders.forEach(s => {
+                const element = document.getElementById(s.id);
+                // Input (Slider drag) listener
+                element.addEventListener('input', (e) => {
+                    updateSlider(s.id, parseFloat(e.target.value));
+                });
+            });
+
+            // Button click listener (delegation)
+            document.getElementById('control-panel').addEventListener('click', (e) => {
+                const button = e.target.closest('.control-btn');
+                if (!button) return;
+
+                const targetId = button.dataset.target;
+                const action = button.dataset.action;
+                const targetElement = document.getElementById(targetId);
+
+                if (targetElement) {
+                    const currentValue = parseFloat(targetElement.value);
+                    const step = parseFloat(targetElement.step || 1);
+                    let newValue = currentValue;
+
+                    if (action === 'increment') {
+                        newValue = currentValue + step;
+                    } else if (action === 'decrement') {
+                        newValue = currentValue - step;
+                    }
+
+                    updateSlider(targetId, newValue);
+                }
+            });
+
+            // Rectangle Checkbox Listener
+            const enableRect = document.getElementById('enableRectangle');
+            enableRect.addEventListener('change', (e) => {
+                isRectangleVisible = e.target.checked;
+                updateRectangle();
+            });
+
+            // Axis Checkbox and Input Listeners
+            const axisChangeHandler = () => {
+                isXAxisVisible = document.getElementById('enableXAxis').checked;
+                isYAxisVisible = document.getElementById('enableYAxis').checked;
+                updateScales(); // This calls updateAxes and updates Min/Max values
+            };
+
+            document.getElementById('enableXAxis').addEventListener('change', axisChangeHandler);
+            document.getElementById('enableYAxis').addEventListener('change', axisChangeHandler);
+            document.getElementById('xAxisUnit').addEventListener('change', updateAxes);
+            document.getElementById('yAxisUnit').addEventListener('change', updateAxes);
+            document.getElementById('xAxisMin').addEventListener('input', updateScales);
+            document.getElementById('xAxisMax').addEventListener('input', updateScales);
+            document.getElementById('yAxisMin').addEventListener('input', updateScales);
+            document.getElementById('yAxisMax').addEventListener('input', updateScales);
+            
+
+            // Start the D3 visualization
+            updateScales(); // Initialize scales and axes (must be first)
+            updatePositions(); // Initialize center position and rectangle
+            startGlitter();
+        });
+
+    </script>
 </body>
 </html>

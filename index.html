@@ -3,426 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>D3.js Interactive Glitter Field with Axes and Clipping</title>
-    <!-- Load Tailwind CSS for styling the page -->
+    <title>Interactive D3 Glitter Field</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load D3.js library -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- Load D3.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <!-- Load Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
     <style>
-        /* Define the primary container for the visualization */
-        .glitter-container {
-            width: 100%;
-            height: 60vh; 
-            min-height: 350px;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            /* Initial background color will be set by JS via backgroundLightness state */
-            background-color: hsl(240, 10%, 5%); 
-            overflow: hidden;
-            position: relative; /* Needed for absolute positioning of axes/rect */
-        }
-
-        /* Ensure the SVG scales to fill its container */
-        svg {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-
-        /* Use Inter font globally */
-        body {
-            font-family: 'Inter', sans-serif;
-        }
-
-        /* Custom styling for control buttons */
+        /* Custom styles for D3 elements and controls */
+        .font-inter { font-family: 'Inter', sans-serif; }
         .control-btn {
-            @apply w-6 h-6 p-0 flex items-center justify-center bg-purple-100 text-purple-700 rounded-full font-bold text-lg leading-none transition duration-150 hover:bg-purple-300 active:bg-purple-500;
+            width: 24px; height: 24px; padding: 0; display: flex; align-items: center; justify-content: center;
+            background-color: #ede9fe; color: #6d28d9; border-radius: 9999px; font-weight: bold; line-height: 1;
+            transition: all 150ms ease-in-out;
         }
-
-        /* Custom styling for sliders (Tailwind only provides basic styles) */
-        input[type=range] {
-            -webkit-appearance: none;
-            width: 100%;
-            height: 8px;
-            background: #e5e7eb; /* Light gray track */
-            border-radius: 4px;
-        }
+        .control-btn:hover { background-color: #d8b4fe; }
+        .control-btn:active { background-color: #a78bfa; }
+        .control-btn:disabled { opacity: 0.5; cursor: not-allowed; background-color: #e5e7eb; color: #9ca3af; }
+        input[type=range] { -webkit-appearance: none; width: 100%; height: 8px; background: #e5e7eb; border-radius: 4px; }
         input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            background: #9f7aea; /* Purple thumb */
-            cursor: pointer;
-            box-shadow: 0 0 5px rgba(159, 122, 234, 0.8);
+            -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%;
+            background: #9f7aea; cursor: pointer; box-shadow: 0 0 5px rgba(159, 122, 234, 0.8);
         }
-
-        /* Style for D3 Axes */
-        .axis line, .axis path {
-            stroke: #7f8c8d; /* Grayish line color */
+        .axis line, .axis path { stroke: #7f8c8d; }
+        .axis text { fill: #7f8c8d; font-size: 10px; }
+        .glitter-container {
+            height: 60vh; min-height: 350px; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); overflow: hidden; position: relative;
         }
-        .axis text {
-            fill: #7f8c8d; /* Grayish text color */
-            font-size: 10px;
-        }
-        
-        /* NEW Style for collapsible headers: smaller and cleaner */
-        .section-header {
-            /* Reduced padding, smaller font, and purple hover */
-            @apply w-full flex justify-between items-center py-2 px-2 font-semibold text-base text-gray-700 transition duration-200 rounded hover:bg-purple-50 cursor-pointer;
-            margin-top: 8px; 
-            border-bottom: 1px solid #e5e7eb; /* Subtle separator line */
-        }
-        .section-icon {
-            @apply transition-transform duration-300 w-5 h-5 text-purple-500;
-        }
-        /* Rotates the right-arrow icon 90 degrees clockwise to make it a DOWN arrow (Closed state) */
-        .rotate-90 {
-            transform: rotate(90deg);
-        }
-        /* Icon is NOT rotated when the section is open (points RIGHT) */
-
+        .section-header { margin-top: 8px; border-bottom: 1px solid #e5e7eb; }
+        .axis-label { fill: #7f8c8d; font-size: 12px; }
     </style>
 </head>
+<body class="bg-gray-100 flex h-screen overflow-hidden font-inter">
 
-<!-- Use flex to create the side-by-side layout. h-screen and overflow-hidden prevent main scrolling. -->
-<body class="bg-gray-100 flex h-screen overflow-hidden">
-    
-    <!-- Control Panel (Fixed Width Sidebar on the LEFT) -->
+    <!-- Control Panel (Sidebar) -->
     <div id="control-panel" class="w-80 bg-white shadow-2xl p-6 border-r border-gray-200 overflow-y-auto">
         
         <h2 class="text-2xl font-bold mb-4 text-gray-800">Control Panel</h2>
         
-        <!-- Title and Description Inputs -->
+        <!-- Dynamic Title and Description Inputs -->
         <div class="space-y-4 pb-6 border-b border-gray-200 mb-6">
             <div>
                 <label for="canvasTitleInput" class="text-sm font-medium text-gray-700 block mb-1">Canvas Title</label>
-                <input type="text" id="canvasTitleInput" value="Interactive Skewed Glitter Field" class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-purple-500 focus:border-purple-500">
+                <input type="text" id="canvasTitleInput" oninput="updateVisualization(); updateTitle()" 
+                       class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-purple-500 focus:border-purple-500">
             </div>
             <div>
                 <label for="canvasDescriptionInput" class="text-sm font-medium text-gray-700 block mb-1">Canvas Description</label>
-                <textarea id="canvasDescriptionInput" rows="2" class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-purple-500 focus:border-purple-500">Adjust the parameters in the control panel to see real-time particle dynamics.</textarea>
+                <textarea id="canvasDescriptionInput" rows="2" oninput="updateVisualization(); updateTitle()"
+                          class="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-purple-500 focus:border-purple-500"></textarea>
             </div>
         </div>
 
         <!-- Collapsible Section: Particle Parameters -->
-        <div class="mb-4">
-            <button class="section-header" data-target="particle-params" data-expanded="true">
-                Particle Parameters
-                <svg id="particle-params-icon" class="section-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-            <div id="particle-params" class="section-content space-y-6 pt-4 px-2" style="display: block;">
-                
-                <!-- H Spread ($S_H$) -->
-                <div class="space-y-2">
-                    <label for="hSpread" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>H Spread ($S_H$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="hSpread" data-action="decrement" class="control-btn">-</button>
-                            <span id="hSpreadValue" class="font-mono text-purple-600 w-10 text-right">400</span>
-                            <button data-target="hSpread" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="hSpread" min="100" max="800" value="400" step="10" class="w-full">
-                </div>
-
-                <!-- V Spread ($S_V$) -->
-                <div class="space-y-2">
-                    <label for="vSpread" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>V Spread ($S_V$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="vSpread" data-action="decrement" class="control-btn">-</button>
-                            <span id="vSpreadValue" class="font-mono text-purple-600 w-10 text-right">60</span>
-                            <button data-target="vSpread" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="vSpread" min="10" max="150" value="60" step="5" class="w-full">
-                </div>
-                
-                <!-- Radial Density Skew ($E$) -->
-                <div class="space-y-2">
-                    <label for="densitySkew" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Radial Density Skew ($E$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="densitySkew" data-action="decrement" class="control-btn">-</button>
-                            <span id="densitySkewValue" class="font-mono text-purple-600 w-10 text-right">3.0</span>
-                            <button data-target="densitySkew" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="densitySkew" min="1.0" max="10.0" value="3.0" step="0.1" class="w-full">
-                </div>
-
-                <!-- Burst Count ($N$) -->
-                <div class="space-y-2">
-                    <label for="particleCount" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Burst Count ($N$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="particleCount" data-action="decrement" class="control-btn">-</button>
-                            <span id="particleCountValue" class="font-mono text-purple-600 w-10 text-right">50</span>
-                            <button data-target="particleCount" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="particleCount" min="5" max="200" value="50" step="5" class="w-full">
-                </div>
-
-                <!-- Speed ($T$) -->
-                <div class="space-y-2">
-                    <label for="particleDuration" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Speed ($T$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="particleDuration" data-action="decrement" class="control-btn">-</button>
-                            <span id="particleDurationValue" class="font-mono text-purple-600 w-10 text-right">1.0s</span>
-                            <button data-target="particleDuration" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="particleDuration" min="500" max="3000" value="1000" step="100" class="w-full">
-                </div>
-
-                <!-- Color Diversity ($P_{sat}$) -->
-                <div class="space-y-2">
-                    <label for="colorDiversity" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Color Diversity ($P_{sat}$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="colorDiversity" data-action="decrement" class="control-btn">-</button>
-                            <span id="colorDiversityValue" class="font-mono text-purple-600 w-10 text-right">0%</span>
-                            <button data-target="colorDiversity" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="colorDiversity" min="0.0" max="1.0" value="0.0" step="0.05" class="w-full">
-                </div>
-
-                <!-- Center X-Offset ($\Delta x$) -->
-                <div class="space-y-2">
-                    <label for="xOffset" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Center X-Offset ($\Delta x$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="xOffset" data-action="decrement" class="control-btn">-</button>
-                            <span id="xOffsetValue" class="font-mono text-purple-600 w-10 text-right">0</span>
-                            <button data-target="xOffset" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="xOffset" min="-200" max="200" value="0" step="10" class="w-full">
-                </div>
-
-                <!-- Center Y-Offset ($\Delta y$) -->
-                <div class="space-y-2">
-                    <label for="yOffset" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Center Y-Offset ($\Delta y$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="yOffset" data-action="decrement" class="control-btn">-</button>
-                            <span id="yOffsetValue" class="font-mono text-purple-600 w-10 text-right">0</span>
-                            <button data-target="yOffset" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="yOffset" min="-100" max="100" value="0" step="10" class="w-full">
-                </div>
-
-                <!-- X Spread Bias ($\text{Bias}_X$) -->
-                <div class="space-y-2">
-                    <label for="xBias" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>X Spread Bias ($\text{Bias}_X$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="xBias" data-action="decrement" class="control-btn">-</button>
-                            <span id="xBiasValue" class="font-mono text-purple-600 w-10 text-right">0.0</span>
-                            <button data-target="xBias" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="xBias" min="-1.0" max="1.0" value="0.0" step="0.1" class="w-full">
-                </div>
-
-                <!-- Y Spread Bias ($\text{Bias}_Y$) -->
-                <div class="space-y-2">
-                    <label for="yBias" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Y Spread Bias ($\text{Bias}_Y$)</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="yBias" data-action="decrement" class="control-btn">-</button>
-                            <span id="yBiasValue" class="font-mono text-purple-600 w-10 text-right">0.0</span>
-                            <button data-target="yBias" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="yBias" min="-1.0" max="1.0" value="0.0" step="0.1" class="w-full">
-                </div>
-            </div>
-        </div>
-
-        <!-- Collapsible Section: Visualization Display (Zoom and Background) -->
-        <div class="mb-4">
-            <button class="section-header" data-target="vis-display" data-expanded="true">
-                Visualization Display
-                <svg id="vis-display-icon" class="section-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-            <div id="vis-display" class="section-content space-y-4 pt-4 px-2" style="display: block;">
-                
-                <!-- Zoom Slider ($Z$) -->
-                <div class="space-y-2">
-                    <label for="zoomSlider" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Zoom Level ($Z$)</span>
-                        <div class="flex items-center space-x-2">
-                            <span id="zoomSliderValue" class="font-mono text-purple-600 w-10 text-right">1.0x</span>
-                        </div>
-                    </label>
-                    <input type="range" id="zoomSlider" min="0.5" max="3.0" value="1.0" step="0.1" class="w-full">
-                </div>
-
-                <!-- Background Lightness Slider ($L_{bg}$) -->
-                <div class="space-y-2">
-                    <label for="bgLightness" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Background Lightness ($L_{bg}$)</span>
-                        <div class="flex items-center space-x-2">
-                            <span id="bgLightnessValue" class="font-mono text-purple-600 w-10 text-right">5%</span>
-                        </div>
-                    </label>
-                    <input type="range" id="bgLightness" min="0" max="20" value="5" step="1" class="w-full">
-                </div>
-
-            </div>
-        </div>
-
+        <div id="particle-params-section"></div>
+        <!-- Collapsible Section: Visualization Display -->
+        <div id="vis-display-section"></div>
         <!-- Collapsible Section: Boundary Object -->
-        <div class="mb-4">
-            <button class="section-header" data-target="boundary-object" data-expanded="false">
-                Boundary Object (Clipping)
-                <svg id="boundary-object-icon" class="section-icon rotate-90" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-            <div id="boundary-object" class="section-content space-y-4 pt-4 px-2" style="display: none;">
-                
-                <div class="flex items-center justify-between">
-                    <label for="enableRectangle" class="text-sm font-medium text-gray-700">Enable Rectangle Boundary</label>
-                    <input type="checkbox" id="enableRectangle" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
-                </div>
-
-                <!-- Rectangle Width -->
-                <div class="space-y-2">
-                    <label for="rectWidth" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Boundary Width</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="rectWidth" data-action="decrement" class="control-btn">-</button>
-                            <span id="rectWidthValue" class="font-mono text-purple-600 w-10 text-right">500</span>
-                            <button data-target="rectWidth" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="rectWidth" min="100" max="900" value="500" step="10" class="w-full">
-                </div>
-
-                <!-- Rectangle Height -->
-                <div class="space-y-2">
-                    <label for="rectHeight" class="text-sm font-medium text-gray-700 flex justify-between items-center">
-                        <span>Boundary Height</span>
-                        <div class="flex items-center space-x-2">
-                            <button data-target="rectHeight" data-action="decrement" class="control-btn">-</button>
-                            <span id="rectHeightValue" class="font-mono text-purple-600 w-10 text-right">200</span>
-                            <button data-target="rectHeight" data-action="increment" class="control-btn">+</button>
-                        </div>
-                    </label>
-                    <input type="range" id="rectHeight" min="50" max="300" value="200" step="10" class="w-full">
-                </div>
-            </div>
-        </div>
-
+        <div id="boundary-object-section"></div>
         <!-- Collapsible Section: Visualization Axes -->
-        <div class="mb-4">
-            <button class="section-header" data-target="vis-axes" data-expanded="false">
-                Visualization Axes
-                <svg id="vis-axes-icon" class="section-icon rotate-90" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-            <div id="vis-axes" class="section-content space-y-4 pt-4 px-2" style="display: none;">
-                
-                <!-- X-Axis Controls -->
-                <h4 class="text-md font-medium text-purple-600 border-b pb-1 mb-2">Horizontal (X) Axis</h4>
-                <div class="flex items-center justify-between mb-2">
-                    <label for="enableXAxis" class="text-sm font-medium text-gray-700">Enable X-Axis</label>
-                    <input type="checkbox" id="enableXAxis" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
-                </div>
-                <div>
-                    <label for="xAxisUnit" class="text-xs font-medium text-gray-700 block mb-1">Unit Label</label>
-                    <select id="xAxisUnit" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">(No Label)</option>
-                        <option value="Years">Years</option>
-                        <option value="Integers" selected>Integers</option>
-                        <option value="Meters">Meters</option>
-                    </select>
-                </div>
-                <div class="flex space-x-3">
-                    <div class="flex-1">
-                        <label for="xAxisMin" class="text-xs font-medium text-gray-700 block mb-1">Min Value</label>
-                        <input type="text" id="xAxisMin" value="-500" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
-                    </div>
-                    <div class="flex-1">
-                        <label for="xAxisMax" class="text-xs font-medium text-gray-700 block mb-1">Max Value</label>
-                        <input type="text" id="xAxisMax" value="500" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
-                    </div>
-                </div>
-
-                <!-- Y-Axis Controls -->
-                <h4 class="text-md font-medium text-purple-600 border-b pb-1 my-3">Vertical (Y) Axis</h4>
-                <div class="flex items-center justify-between mb-2">
-                    <label for="enableYAxis" class="text-sm font-medium text-gray-700">Enable Y-Axis</label>
-                    <input type="checkbox" id="enableYAxis" class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
-                </div>
-                <div>
-                    <label for="yAxisUnit" class="text-xs font-medium text-gray-700 block mb-1">Unit Label</label>
-                    <select id="yAxisUnit" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
-                        <option value="">(No Label)</option>
-                        <option value="Percentage">Percentage</option>
-                        <option value="Temperature">Temperature ($\deg\text{C}$)</option>
-                        <option value="Integers" selected>Integers</option>
-                    </select>
-                </div>
-                <div class="flex space-x-3">
-                    <div class="flex-1">
-                        <label for="yAxisMin" class="text-xs font-medium text-gray-700 block mb-1">Min Value</label>
-                        <input type="text" id="yAxisMin" value="-175" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
-                    </div>
-                    <div class="flex-1">
-                        <label for="yAxisMax" class="text-xs font-medium text-gray-700 block mb-1">Max Value</label>
-                        <input type="text" id="yAxisMax" value="175" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- NEW: Collapsible Section: Visualization Annotations -->
-        <div class="mb-4">
-            <button class="section-header" data-target="vis-annotations" data-expanded="true">
-                Visualization Annotations
-                <svg id="vis-annotations-icon" class="section-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-            <div id="vis-annotations" class="section-content space-y-4 pt-4 px-2" style="display: block;">
-                
-                <div id="labels-list" class="space-y-3">
-                    <!-- Dynamic labels will be rendered here -->
-                </div>
-
-                <button id="addLabelBtn" class="w-full p-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition duration-150 text-sm">
-                    + Add New Annotation
-                </button>
-                
-                <!-- Variable Legend -->
-                <div class="text-xs text-gray-600 bg-gray-50 p-2 rounded mt-4 border border-gray-200">
-                    <p class="font-semibold mb-1">Variable Legend (Use in equations):</p>
-                    <ul class="list-disc list-inside space-y-0.5">
-                        <li>$S_H$ (H Spread): <code class="text-purple-700">hSpread</code></li>
-                        <li>$S_V$ (V Spread): <code class="text-purple-700">vSpread</code></li>
-                        <li>$E$ (Density Skew): <code class="text-purple-700">DENSITY_SKEW_EXPONENT</code></li>
-                        <li>$N$ (Burst Count): <code class="text-purple-700">particleCount</code></li>
-                        <li>$T$ (Speed): <code class="text-purple-700">particleDuration</code></li>
-                        <!-- Add other variables if relevant, but keep it concise -->
-                    </ul>
-                    <p class="mt-1">Example: <code class="text-purple-700">2 * vSpread</code> or <code class="text-purple-700">hSpread + vSpread</code></p>
-                </div>
-            </div>
-        </div>
-        
+        <div id="vis-axes-section"></div>
+        <!-- Collapsible Section: Visualization Annotations -->
+        <div id="vis-annotations-section"></div>
     </div>
 
-    <!-- Visualization Area (Takes up all available space) -->
+    <!-- Visualization Area -->
     <div id="main-content" class="flex-grow p-8 flex flex-col items-center justify-center overflow-auto">
         
-        <!-- Dynamic Title and Description -->
+        <!-- Dynamic Title Display -->
         <div class="text-center mb-8 w-full max-w-4xl">
-            <h1 id="canvas-title-display" class="text-3xl sm:text-4xl font-extrabold text-purple-700">Interactive Skewed Glitter Field</h1>
-            <p id="canvas-description-display" class="text-gray-600 mt-2 text-lg">Adjust the parameters in the control panel to see real-time particle dynamics.</p>
+            <h1 id="canvas-title-display" class="text-3xl sm:text-4xl font-extrabold text-purple-700"></h1>
+            <p id="canvas-description-display" class="text-gray-600 mt-2 text-lg"></p>
         </div>
         
         <!-- D3 Visualization Container -->
@@ -430,756 +84,642 @@
             <!-- D3 SVG will be appended here -->
         </div>
     </div>
-    
-    <script>
-        // --- D3.js Logic for Interactive Elliptical Glitter Particles ---
 
-        const CONTAINER_HEIGHT = 350; // Base height for calculating aspect ratio in viewBox
-        const VIEWBOX_WIDTH = 1000; 
-        const MARGIN = { top: 20, right: 20, bottom: 40, left: 50 }; // Margin for axes
+    <script>
+        // --- D3 VISUALIZATION LOGIC (Pure JS) ---
+
+        // D3 Constants
+        const CONTAINER_HEIGHT = 350;
+        const VIEWBOX_WIDTH = 1000;
+        const MARGIN = { top: 20, right: 20, bottom: 40, left: 50 };
         const DRAW_WIDTH = VIEWBOX_WIDTH - MARGIN.left - MARGIN.right;
         const DRAW_HEIGHT = CONTAINER_HEIGHT - MARGIN.top - MARGIN.bottom;
+        const CENTER_RADIUS = 40;
 
-        // Initial constants
-        const CENTER_RADIUS = 40; 
-        
-        // Base center point (fixed)
-        const BASE_CENTER_X = DRAW_WIDTH / 2; // Relative to 'g' group
-        const BASE_CENTER_Y = DRAW_HEIGHT / 2; // Relative to 'g' group
+        // Global State (Replaces React useState)
+        let state = {
+            canvasTitle: "Interactive Skewed Glitter Field",
+            canvasDescription: "Adjust the parameters in the control panel to see real-time particle dynamics.",
+            isParticleOpen: true,
+            isVisOpen: true,
+            isBoundaryOpen: false,
+            isAxesOpen: false,
+            isAnnotationsOpen: true,
 
-        // Dynamic State Variables (linked to slider default values)
-        // IMPORTANT: These names are used in the user's annotation equations
-        let hSpread = 400; 
-        let vSpread = 60;  
-        let DENSITY_SKEW_EXPONENT = 3.0; 
-        let particleCount = 50; 
-        let particleDuration = 1000; 
-        let colorDiversity = 0.0;
-        let xOffset = 0; 
-        let yOffset = 0; 
-        let xBias = 0.0; 
-        let yBias = 0.0; 
-        let zoomLevel = 1.0; 
-        let backgroundLightness = 5; // Lightness state (0-100)
+            hSpread: 400,
+            vSpread: 60,
+            densitySkew: 3.0,
+            particleCount: 50,
+            particleDuration: 1000, // ms
+            colorDiversity: 0.0,
+            xOffset: 0,
+            yOffset: 0,
+            xBias: 0.0,
+            yBias: 0.0,
 
-        // Boundary Object State
-        let isRectangleVisible = false;
-        let rectWidth = 500;
-        let rectHeight = 200;
+            zoomLevel: 1.0,
+            bgLightness: 5,
 
-        // Axis State 
-        let xAxisMin = -500;
-        let xAxisMax = 500;
-        let yAxisMin = -175;
-        let yAxisMax = 175;
-        let xAxisUnit = 'Integers';
-        let yAxisUnit = 'Integers';
-        let isXAxisVisible = false;
-        let isYAxisVisible = false;
-        
-        // NEW: Annotation State - using valueSource for the equation string
-        let labelsState = [
-            { id: 1, text: 'H-Spread ($S_H$)', valueSource: 'hSpread', visible: true, x: 700, y: 30, color: '#3498db' }, // Tracks hSpread
-            { id: 2, text: 'Double V-Spread', valueSource: '2 * vSpread', visible: true, x: 700, y: 55, color: '#2ecc71' }, // Tracks 2 * vSpread
-            { id: 3, text: 'Total Spread', valueSource: 'hSpread + vSpread', visible: false, x: 700, y: 80, color: '#f39c12' }  // Tracks hSpread + vSpread
-        ];
-        let nextLabelId = 4;
-        
-        // Expose all relevant global variables in a scope object for safe equation evaluation
-        const currentScope = {
-            hSpread,
-            vSpread,
-            DENSITY_SKEW_EXPONENT,
-            particleCount,
-            particleDuration,
-            colorDiversity,
-            xOffset,
-            yOffset,
-            xBias,
-            yBias,
-            zoomLevel,
-            backgroundLightness,
-            rectWidth,
-            rectHeight
+            isRectangleVisible: false,
+            rectWidth: 500,
+            rectHeight: 200,
+
+            xAxisMin: -500,
+            xAxisMax: 500,
+            yAxisMin: -175,
+            yAxisMax: 175,
+            xAxisUnit: 'Integers',
+            yAxisUnit: 'Integers',
+            isXAxisVisible: false,
+            isYAxisVisible: false,
+
+            labels: [
+                { id: 1, text: 'H-Spread ($S_H$)', valueSource: 'hSpread', visible: true, x: 700, y: 30, color: '#3498db' },
+                { id: 2, text: 'Double V-Spread', valueSource: '2 * vSpread', visible: true, x: 700, y: 55, color: '#2ecc71' },
+            ],
+            nextLabelId: 3,
         };
-        // Function to update the scope object dynamically (called before evaluation)
-        function updateScope() {
-            currentScope.hSpread = hSpread;
-            currentScope.vSpread = vSpread;
-            currentScope.DENSITY_SKEW_EXPONENT = DENSITY_SKEW_EXPONENT;
-            currentScope.particleCount = particleCount;
-            currentScope.particleDuration = particleDuration;
-            currentScope.colorDiversity = colorDiversity;
-            currentScope.xOffset = xOffset;
-            currentScope.yOffset = yOffset;
-            currentScope.xBias = xBias;
-            currentScope.yBias = yBias;
-            currentScope.zoomLevel = zoomLevel;
-            currentScope.backgroundLightness = backgroundLightness;
-            currentScope.rectWidth = rectWidth;
-            currentScope.rectHeight = rectHeight;
-        }
-
-        // Dynamic Center Coordinates (Effective Center of the Object)
-        let centerX = BASE_CENTER_X;
-        let centerY = BASE_CENTER_Y;
-
-        let particleInterval;
-
-        // Base Scales (untransformed, defined by input min/max)
-        let xScaleBase = d3.scaleLinear().domain([xAxisMin, xAxisMax]).range([0, DRAW_WIDTH]);
-        let yScaleBase = d3.scaleLinear().domain([yAxisMin, yAxisMax]).range([DRAW_HEIGHT, 0]);
-
-        // 1. Initialize SVG container
-        const container = d3.select("#d3-container");
-
-        const svg = container.append("svg")
-            .attr("viewBox", `0 0 ${VIEWBOX_WIDTH} ${CONTAINER_HEIGHT}`)
-            .attr("preserveAspectRatio", "xMidYMid meet");
-
-        // Main group for transformations (to apply margins and ZOOM to the content)
-        const g = svg.append("g")
-            .attr("transform", `translate(${MARGIN.left}, ${MARGIN.top})`);
         
-        // Group for axes and annotations (placed outside the main drawing group 'g' to handle margins correctly)
-        const axisGroup = svg.append("g");
-        
-        // 2. Add the Central Object
-        const centralObject = g.append("circle")
-            .attr("r", CENTER_RADIUS)
-            .attr("fill", "#2c3e50") 
-            .attr("stroke", "#7f8c8d") 
-            .attr("stroke-width", 2)
-            .attr("opacity", 0.9);
+        // D3 Element References
+        let svg, g, axisRoot, particleGroup, annotationGroup, interval;
 
-        // Add the Boundary Rectangle (initially hidden)
-        const boundaryRect = g.append("rect")
-            .attr("fill", "none")
-            .attr("stroke", "#e74c3c")
-            .attr("stroke-dasharray", "5,5")
-            .attr("stroke-width", 2)
-            .style("display", "none"); 
+        /** Utility Functions **/
 
-        // Add X and Y axis groups
-        const xAxisGroup = axisGroup.append("g")
-            .attr("class", "x axis")
-            .attr("transform", `translate(${MARGIN.left}, ${CONTAINER_HEIGHT - MARGIN.bottom})`);
-        
-        const yAxisGroup = axisGroup.append("g")
-            .attr("class", "y axis")
-            .attr("transform", `translate(${MARGIN.left}, ${MARGIN.top})`);
-        
-        // Axis Labels
-        const xAxisLabel = axisGroup.append("text")
-            .attr("class", "axis-label")
-            .attr("transform", `translate(${VIEWBOX_WIDTH / 2}, ${CONTAINER_HEIGHT - 5})`)
-            .style("text-anchor", "middle")
-            .attr("fill", "#7f8c8d");
-
-        const yAxisLabel = axisGroup.append("text")
-            .attr("class", "axis-label")
-            .attr("transform", `translate(15, ${CONTAINER_HEIGHT / 2}) rotate(-90)`)
-            .style("text-anchor", "middle")
-            .attr("fill", "#7f8c8d");
-
-        // 3. Update Function for Base Scales (called when axis inputs change)
-        function updateBaseScales() {
+        // Helper to evaluate the user-defined equation string safely
+        const evaluateEquation = (equation, scope) => {
             try {
-                // Parse Min/Max values safely
-                const xMin = parseFloat(document.getElementById('xAxisMin').value);
-                const xMax = parseFloat(document.getElementById('xAxisMax').value);
-                const yMin = parseFloat(document.getElementById('yAxisMin').value);
-                const yMax = parseFloat(document.getElementById('yAxisMax').value);
-                
-                // Set global state for use in axis drawing
-                xAxisMin = xMin; xAxisMax = xMax;
-                yAxisMin = yMin; yAxisMax = yMax;
-                
-                // Define Base Scales (map data range to pixel range in the drawing area)
-                xScaleBase = d3.scaleLinear().domain([xMin, xMax]).range([0, DRAW_WIDTH]);
-                yScaleBase = d3.scaleLinear().domain([yMin, yMax]).range([DRAW_HEIGHT, 0]); 
-                
-                // Update axis rendering based on new base scales and current zoom
-                updateAxes();
+                // Safely evaluate the expression using the scope variables
+                const func = new Function(...Object.keys(scope), `return ${equation};`);
+                const result = func(...Object.values(scope));
 
-            } catch(e) {
-                console.error("Error updating scales:", e);
+                if (isNaN(result) || !isFinite(result)) {
+                    return "Err";
+                }
+                return parseFloat(result).toFixed(1);
+            } catch (e) {
+                return "Err";
             }
-        }
-        
-        // 4. Update Function for Axes (incorporating zoom)
-        function updateAxes() {
-            const xUnit = document.getElementById('xAxisUnit').value;
-            const yUnit = document.getElementById('yAxisUnit').value;
+        };
+
+        // Helper to generate particle data
+        const generateParticleData = (s) => {
+            const { 
+                particleCount, hSpread, vSpread, densitySkew, colorDiversity, 
+                xBias, yBias, centerX, centerY 
+            } = s;
+
+            const data = [];
+            for (let i = 0; i < particleCount; i++) {
+                const angle = Math.random() * 2 * Math.PI;
+                const densityFactor = Math.pow(Math.random(), densitySkew); 
+                const radius = densityFactor; 
+
+                // Calculate elliptical coordinates
+                const x = centerX + radius * hSpread * Math.cos(angle) * (1 + xBias);
+                const y = centerY + radius * vSpread * Math.sin(angle) * (1 + yBias);
+
+                // Generate color (Hue fixed to purple/blue range, Saturation varied)
+                const hue = 240 + Math.random() * 60; // 240 (Blue) to 300 (Purple)
+                const saturation = 50 + Math.random() * (colorDiversity * 50);
+                const color = `hsl(${hue}, ${saturation}%, 65%)`;
+
+                // Generate size
+                const size = Math.random() * 3 + 1;
+
+                data.push({ id: i, x, y, color, size, radius });
+            }
+            return data;
+        };
+
+        /** Core Visualization Functions **/
+
+        // 1. D3 Initialization (Runs once on load)
+        const initializeD3 = () => {
+            const container = d3.select("#d3-container");
+
+            // 1. Create SVG
+            svg = container.append("svg")
+                .attr("viewBox", `0 0 ${VIEWBOX_WIDTH} ${CONTAINER_HEIGHT}`)
+                .attr("preserveAspectRatio", "xMidYMid meet");
+
+            // 2. Define Clip Path
+            svg.append("defs").append("clipPath")
+                .attr("id", "clip-rect")
+                .append("rect")
+                .attr("id", "clip-rect-shape");
+
+            // 3. Axis Root Group (Not affected by zoom)
+            axisRoot = svg.append("g").attr("id", "axis-root");
+
+            // Initialize axis groups
+            axisRoot.append("g")
+                .attr("id", "x-axis-group")
+                .attr("class", "x axis")
+                .attr("transform", `translate(${MARGIN.left}, ${CONTAINER_HEIGHT - MARGIN.bottom})`)
+                .style("display", "none");
+            axisRoot.append("text")
+                .attr("id", "x-axis-label")
+                .attr("class", "axis-label")
+                .attr("text-anchor", "middle")
+                .attr("font-size", 12);
+
+            axisRoot.append("g")
+                .attr("id", "y-axis-group")
+                .attr("class", "y axis")
+                .attr("transform", `translate(${MARGIN.left}, ${MARGIN.top})`)
+                .style("display", "none");
+            axisRoot.append("text")
+                .attr("id", "y-axis-label")
+                .attr("class", "axis-label")
+                .attr("font-size", 12);
+
+            // 4. Main Content Group (Affected by zoom)
+            g = svg.append("g").attr("id", "main-content-group");
+
+            // Clipping background rectangle (used to show the clip area)
+            g.append("rect")
+                .attr("id", "boundary-rect-shape")
+                .attr("fill", "none")
+                .attr("stroke", "#e74c3c")
+                .attr("stroke-dasharray", "5,5")
+                .attr("stroke-width", 2)
+                .style("display", "none"); 
+
+            // Central object (circle)
+            g.append("circle")
+                .attr("id", "central-object")
+                .attr("r", CENTER_RADIUS)
+                .attr("fill", "#2c3e50")
+                .attr("stroke", "#7f8c8d")
+                .attr("stroke-width", 2)
+                .attr("opacity", 0.9);
+
+            // Group for particles
+            particleGroup = g.append("g").attr("id", "particle-group");
+
+            // Group for annotations
+            annotationGroup = g.append("g").attr("id", "annotation-group");
+
+            updateVisualization();
+            startAnimationLoop();
+        };
+
+        // 2. Static Visualization Updates (Axes, Annotations, Zoom, Clipping)
+        const updateVisualization = () => {
+            if (!svg || !g || !axisRoot) return;
             
-            // Create a custom D3 transform object to represent the scale change relative to the chart center
-            const transform = d3.zoomIdentity
-                .translate(BASE_CENTER_X, BASE_CENTER_Y)
-                .scale(zoomLevel)
-                .translate(-BASE_CENTER_X, -BASE_CENTER_Y);
+            // Effective center point based on offsets
+            const centerX = DRAW_WIDTH / 2 + state.xOffset;
+            const centerY = DRAW_HEIGHT / 2 + state.yOffset;
 
-            // Use the D3 transform to rescale the base scales. This updates the domain to reflect the zoom.
-            const xScaleEffective = xScaleBase.copy().domain(transform.rescaleX(xScaleBase).domain());
-            const yScaleEffective = yScaleBase.copy().domain(transform.rescaleY(yScaleBase).domain());
+            // Prepare the scope object for equation evaluation
+            const currentScope = {
+                hSpread: state.hSpread, 
+                vSpread: state.vSpread, 
+                DENSITY_SKEW_EXPONENT: state.densitySkew, 
+                particleCount: state.particleCount, 
+                particleDuration: state.particleDuration, 
+                colorDiversity: state.colorDiversity, 
+                xOffset: state.xOffset, 
+                yOffset: state.yOffset, 
+                xBias: state.xBias, 
+                yBias: state.yBias, 
+                zoomLevel: state.zoomLevel, 
+                bgLightness: state.bgLightness, 
+                rectWidth: state.rectWidth, 
+                rectHeight: state.rectHeight,
+            };
 
-            // X-Axis
-            if (isXAxisVisible) {
-                const xAxis = d3.axisBottom(xScaleEffective).ticks(5);
-                xAxisGroup.call(xAxis).style("display", null);
-                xAxisLabel.text(xUnit).style("display", null);
+            // --- SCALES AND AXES SETUP ---
+            const xScaleBase = d3.scaleLinear()
+                .domain([state.xAxisMin, state.xAxisMax])
+                .range([0, DRAW_WIDTH]);
+            
+            const yScaleBase = d3.scaleLinear()
+                .domain([state.yAxisMin, state.yAxisMax])
+                .range([DRAW_HEIGHT, 0]);
+
+            const xAxis = d3.axisBottom(xScaleBase).ticks(5).tickSizeOuter(0);
+            const yAxis = d3.axisLeft(yScaleBase).ticks(5).tickSizeOuter(0);
+
+            // 1. Apply Zoom Level to the main content group
+            const zoomTransform = `scale(${state.zoomLevel})`;
+            const translateToCenter = `translate(${DRAW_WIDTH / 2}, ${DRAW_HEIGHT / 2})`;
+            const translateToMargin = `translate(${MARGIN.left}, ${MARGIN.top})`;
+
+            g.attr("transform", `${translateToMargin} ${translateToCenter} ${zoomTransform} translate(${-DRAW_WIDTH / 2}, ${-DRAW_HEIGHT / 2})`);
+
+            // 2. Update Central Object Position
+            g.select("#central-object")
+                .attr("cx", centerX)
+                .attr("cy", centerY);
+
+            // 3. Update Clipping and Boundary Rectangle
+            const boundaryRectShape = g.select("#boundary-rect-shape");
+            const clipRectShape = svg.select("#clip-rect-shape");
+
+            if (state.isRectangleVisible) {
+                boundaryRectShape.style("display", "block")
+                    .attr("x", centerX - state.rectWidth / 2)
+                    .attr("y", centerY - state.rectHeight / 2)
+                    .attr("width", state.rectWidth)
+                    .attr("height", state.rectHeight);
+
+                clipRectShape
+                    .attr("x", centerX - state.rectWidth / 2)
+                    .attr("y", centerY - state.rectHeight / 2)
+                    .attr("width", state.rectWidth)
+                    .attr("height", state.rectHeight);
+
+                particleGroup.attr("clip-path", "url(#clip-rect)");
+            } else {
+                boundaryRectShape.style("display", "none");
+                particleGroup.attr("clip-path", null);
+            }
+
+            // 4. Update Axes
+            const xAxisGroup = axisRoot.select("#x-axis-group");
+            const yAxisGroup = axisRoot.select("#y-axis-group");
+            const xAxisLabel = axisRoot.select("#x-axis-label");
+            const yAxisLabel = axisRoot.select("#y-axis-label");
+
+            if (state.isXAxisVisible) {
+                xAxisGroup.call(xAxis).style("display", "block");
+                xAxisLabel
+                    .attr("x", VIEWBOX_WIDTH / 2)
+                    .attr("y", CONTAINER_HEIGHT - 5)
+                    .text(state.xAxisUnit)
+                    .style("display", state.xAxisUnit ? "block" : "none");
             } else {
                 xAxisGroup.style("display", "none");
                 xAxisLabel.style("display", "none");
             }
 
-            // Y-Axis
-            if (isYAxisVisible) {
-                const yAxis = d3.axisLeft(yScaleEffective).ticks(5);
-                yAxisGroup.call(yAxis).style("display", null);
-                yAxisLabel.text(yUnit).style("display", null);
+            if (state.isYAxisVisible) {
+                yAxisGroup.call(yAxis).style("display", "block");
+                yAxisLabel
+                    .attr("transform", `translate(15, ${CONTAINER_HEIGHT / 2}) rotate(-90)`)
+                    .attr("text-anchor", "middle")
+                    .text(state.yAxisUnit)
+                    .style("display", state.yAxisUnit ? "block" : "none");
             } else {
                 yAxisGroup.style("display", "none");
                 yAxisLabel.style("display", "none");
             }
-        }
-        
-        // 5. Update Function for Zoom
-        function updateZoom() {
-            zoomLevel = parseFloat(document.getElementById('zoomSlider').value);
-            document.getElementById('zoomSliderValue').textContent = zoomLevel.toFixed(1) + 'x';
-
-            // Calculate the required translation to keep the zoom centered relative to the drawing area (DRAW_WIDTH/2)
-            const tx = BASE_CENTER_X * (1 - zoomLevel);
-            const ty = BASE_CENTER_Y * (1 - zoomLevel);
-
-            // Apply scale and translation to the main drawing group 'g'
-            g.attr("transform", `translate(${MARGIN.left + tx}, ${MARGIN.top + ty}) scale(${zoomLevel})`);
             
-            // CRUCIAL FIX: Update axes after zoom transformation is applied
-            updateAxes(); 
-            drawAnnotations(); // Redraw annotations to update tracked values
-        }
-        
-        // 6. Update Function for Background Color
-        function updateBackgroundColor() {
-            backgroundLightness = parseInt(document.getElementById('bgLightness').value);
-            
-            // Fixed Hue (240 = Blue/Purple), Fixed Saturation (10% = Desaturated)
-            const hue = 240; 
-            const saturation = 10;
-            const lightness = backgroundLightness; 
+            // Update container background color
+            d3.select("#d3-container").style("background-color", `hsl(240, 10%, ${state.bgLightness}%)`);
 
-            // Apply the HSL color to the main container
-            const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-            d3.select("#d3-container").style("background-color", color);
-            
-            // Update the display value
-            document.getElementById('bgLightnessValue').textContent = `${lightness}%`;
-            
-            drawAnnotations(); // Redraw annotations to update tracked values
-        }
-
-
-        // 7. Update Function for Central Object and Rectangle Boundary
-        function updatePositions() {
-            // Calculate new effective center based on offsets, relative to the drawing area center
-            centerX = BASE_CENTER_X + xOffset;
-            centerY = BASE_CENTER_Y + yOffset;
-
-            // Immediately move the central object (which is in group 'g')
-            centralObject
-                .attr("cx", centerX)
-                .attr("cy", centerY);
-            
-            // Update the boundary rectangle as well
-            updateRectangle();
-        }
-
-        function updateRectangle() {
-            // Check boundaries (centered rectangle, in group 'g')
-            const rectX = centerX - rectWidth / 2;
-            const rectY = centerY - rectHeight / 2;
-
-            if (isRectangleVisible) {
-                boundaryRect
-                    .attr("x", rectX)
-                    .attr("y", rectY)
-                    .attr("width", rectWidth)
-                    .attr("height", rectHeight)
-                    .style("display", null);
-            } else {
-                boundaryRect.style("display", "none");
-            }
-            
-            // Immediately restart glitter to apply the new clipping boundary
-            startGlitter();
-            drawAnnotations(); // Redraw annotations to update tracked values
-        }
-
-        // 8. Particle Data Generation
-        function generateParticles(count) {
-            const particles = [];
-            const saturation = 100 * colorDiversity; 
-
-            for (let i = 0; i < count; i++) {
-                const angle = Math.random() * 2 * Math.PI;
-                const cosAngle = Math.cos(angle);
-                const sinAngle = Math.sin(angle);
+            // 5. Update Annotations
+            const annotation = annotationGroup.selectAll("text.annotation")
+                .data(state.labels.filter(d => d.visible), d => d.id);
                 
-                // Calculate Effective Spread based on Bias
-                const hSpreadEff = hSpread * (1 + xBias * Math.sign(cosAngle));
-                const vSpreadEff = vSpread * (1 + yBias * Math.sign(sinAngle));
-
-                // Density Bias Calculation (Skewed Factor D)
-                const biasedFactor = Math.pow(Math.random(), DENSITY_SKEW_EXPONENT); 
-
-                // Calculate raw coordinates (Distance D * direction * effective spread)
-                const rawX = biasedFactor * cosAngle * hSpreadEff;
-                const rawY = biasedFactor * sinAngle * vSpreadEff;
-
-                // The final position is just the object center plus the raw offset. (inside group 'g')
-                const x = centerX + rawX;
-                const y = centerY + rawY;
-                
-                // --- BOUNDARY CLIPPING LOGIC (CRITICAL) ---
-                if (isRectangleVisible) {
-                    const rectXMin = centerX - rectWidth / 2;
-                    const rectYMin = centerY - rectHeight / 2;
-                    const rectXMax = centerX + rectWidth / 2;
-                    const rectYMax = centerY + rectHeight / 2;
-
-                    // If particle is outside the rectangle, skip it.
-                    if (x < rectXMin || x > rectXMax || y < rectYMin || y > rectYMax) {
-                        continue; 
-                    }
-                }
-                // ---------------------------------
-                
-                const FIXED_RADIUS = 2.0; 
-                const FIXED_OPACITY = 0.9; 
-
-                particles.push({
-                    id: Date.now() + i,
-                    x: x,
-                    y: y,
-                    r: FIXED_RADIUS, 
-                    initialOpacity: FIXED_OPACITY, 
-                    color: `hsl(${Math.random() * 360}, ${saturation}%, 75%)` 
-                });
-            }
-            return particles;
-        }
-
-        // 9. Animation Function: Defines the fast lifecycle of a single particle
-        function animateParticle(selection) {
-            const duration = particleDuration;
-            
-            selection
-                .attr("opacity", d => d.initialOpacity) 
-                .attr("r", 0) 
+            annotation.enter().append("text")
+                .attr("class", "annotation text-xs font-mono")
+                .merge(annotation)
+                .attr("x", d => d.x)
+                .attr("y", d => d.y)
                 .attr("fill", d => d.color)
+                .text(d => `${d.text}: ${evaluateEquation(d.valueSource, currentScope)}`)
+                .style("display", "block")
+                .attr("font-weight", "bold");
 
-                // PHASE 1: SHOW UP (10% of duration)
-                .transition().duration(duration * 0.1)
-                    .attr("r", d => d.r) // Grow to full radius
-                // PHASE 2: PAUSE / FULL SIZE (70% of duration)
-                .transition().delay(duration * 0.1).duration(duration * 0.7)
-                    .attr("opacity", d => d.initialOpacity)
-                // PHASE 3: FADE AWAY (20% of duration)
-                .transition().delay(duration * 0.8).duration(duration * 0.2)
-                    .attr("opacity", 0)
-                // FINAL: Remove the element
-                .on("end", function() {
-                    d3.select(this).remove();
-                });
-        }
-        
-        // 10. Continuous Particle Generation Manager (startGlitter)
-        function startGlitter() {
-            // Clear any previous interval to stop continuous generation
-            if (particleInterval) {
-                clearInterval(particleInterval);
-            }
+            annotation.exit().remove();
+        };
+
+        // 3. Particle Animation Loop
+        const animateParticles = () => {
+            if (!particleGroup) return;
+
+            const particleState = {
+                hSpread: state.hSpread, vSpread: state.vSpread, densitySkew: state.densitySkew, colorDiversity: state.colorDiversity, 
+                xBias: state.xBias, yBias: state.yBias, 
+                centerX: DRAW_WIDTH / 2 + state.xOffset, 
+                centerY: DRAW_HEIGHT / 2 + state.yOffset
+            };
             
-            // Clear existing particles from the drawing group 'g'
-            g.selectAll(".glitter-particle").remove();
+            const particleData = generateParticleData(particleState);
 
-            const intervalTime = 50; // Emit a new burst every 50ms for smooth, continuous flow
+            const circles = particleGroup.selectAll("circle.particle")
+                .data(particleData, d => d.id);
 
-            particleInterval = setInterval(() => {
-                const particles = generateParticles(particleCount);
-                
-                // Bind new particles and start their animation cycle
-                g.selectAll(null)
-                    .data(particles, d => d.id) // Key by ID to ensure correct binding
-                    .enter()
-                    .append("circle")
-                    .attr("class", "glitter-particle") // IMPORTANT: Class for future removal
-                    .attr("cx", d => d.x)
-                    .attr("cy", d => d.y)
-                    .call(animateParticle); // Start the animation chain
-                
-            }, intervalTime);
-        }
-
-        // --- NEW ANNOTATION LOGIC ---
-
-        // Function to safely evaluate a user-defined equation string within the current scope
-        function evaluateAnnotationValue(equationString) {
-            if (!equationString || equationString.trim() === '') return null;
-            
-            // 1. Ensure the scope is up-to-date with the latest global state
-            updateScope();
-            
-            const keys = Object.keys(currentScope);
-            const values = Object.values(currentScope);
-            
-            // 2. Safe Execution using Function Constructor
-            try {
-                // The equation must be a valid JavaScript expression.
-                const formula = new Function(...keys, `return ${equationString};`);
-                let result = formula(...values);
-                
-                if (typeof result !== 'number' || isNaN(result)) {
-                    return NaN; // Indicate calculation failure
-                }
-                return result;
-            } catch (e) {
-                // console.error("Equation error:", e);
-                return NaN; // Return NaN on syntax error or execution failure
-            }
-        }
-
-        // Helper to format the value based on typical units
-        function formatValue(value) {
-            if (value === null) return 'N/A';
-            if (isNaN(value)) return 'ERROR';
-
-            // Automatic formatting logic based on magnitude/type
-            if (value === 0) return '0';
-            
-            // Duration (often small, but particleDuration is in ms)
-            if (value > 1000 && value % 1000 === 0 && value / 1000 < 5) {
-                return (value / 1000).toFixed(1) + 's';
-            }
-            
-            // Percentages (for diversity, which is 0-1)
-            if (value <= 1.0 && value > 0 && Math.abs(value - 0.5) < 0.5) {
-                return value.toFixed(2);
-            }
-            
-            // Floats (e.g., bias, skew)
-            if (value < 10 && !Number.isInteger(value)) {
-                return value.toFixed(1);
-            }
-
-            // Default for large numbers (integers)
-            return Math.round(value).toString();
-        }
-
-        // 11. Annotation Rendering 
-        function drawAnnotations() {
-            // Annotations are added to axisGroup so they are not affected by the main group's zoom/translation
-            const annotations = axisGroup.selectAll(".annotation")
-                .data(labelsState.filter(d => d.visible), d => d.id);
-
-            // Exit selection (Remove annotations that are no longer visible)
-            annotations.exit().remove();
-
-            // Enter selection (Add new annotations)
-            annotations.enter()
-                .append("text")
-                .attr("class", "annotation")
-                .merge(annotations) // Merge enter and update selections
-                .attr("x", d => d.x) // Fixed X position (relative to VIEWBOX)
-                .attr("y", d => d.y) // Fixed Y position (relative to VIEWBOX)
+            // ENTER selection: Create new circles
+            circles.enter().append("circle")
+                .attr("class", "particle")
+                .attr("cx", particleState.centerX) // Start at the center
+                .attr("cy", particleState.centerY)
+                .attr("r", 0) // Start with zero radius
                 .attr("fill", d => d.color)
-                .attr("font-size", "14px")
-                .attr("font-style", "italic")
-                .text(d => {
-                    const result = evaluateAnnotationValue(d.valueSource);
-                    
-                    // Display static text if valueSource is empty or only whitespace
-                    if (!d.valueSource || d.valueSource.trim() === '') {
-                        return d.text;
-                    }
-                    
-                    const formattedValue = formatValue(result);
-                    // Append the result to the user's text
-                    return `${d.text}: ${formattedValue}`;
-                });
-        }
+                .attr("opacity", 1)
+                .merge(circles) // Merge enter and update selections for transition
+                .transition()
+                .duration(state.particleDuration * 0.9)
+                .ease(d3.easeLinear)
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("r", d => d.size)
+                .attr("opacity", 0) // Fade out
+                .remove(); // Remove circles after the transition finishes
+        };
 
-        // 12. Update Control Panel Label List 
-        function renderLabelsList() {
-            const listContainer = d3.select("#labels-list");
+        const startAnimationLoop = () => {
+            if (interval) clearInterval(interval);
+            animateParticles();
+            interval = setInterval(animateParticles, state.particleDuration);
+        };
 
-            // Data join for the wrapper divs for each label
-            const labelWrappers = listContainer.selectAll(".label-item")
-                .data(labelsState, d => d.id);
+        /** UI Rendering and Event Handlers **/
 
-            // Exit selection
-            labelWrappers.exit().remove();
+        // Update main titles
+        const updateTitle = () => {
+            state.canvasTitle = document.getElementById('canvasTitleInput').value;
+            state.canvasDescription = document.getElementById('canvasDescriptionInput').value;
+            document.getElementById('canvas-title-display').textContent = state.canvasTitle;
+            document.getElementById('canvas-description-display').textContent = state.canvasDescription;
+        };
 
-            // Enter selection (Create the full HTML structure for a new label)
-            const newLabelWrappers = labelWrappers.enter()
-                .append("div")
-                .attr("class", "label-item border-b border-gray-100 pb-3 mb-3 pt-1");
-
-            // Row 1: Checkbox and Remove Button
-            const row1 = newLabelWrappers.append("div")
-                .attr("class", "flex justify-between items-center mb-1");
+        // Generic handler for sliders and text inputs
+        const handleValueChange = (key, parseFunc) => (e) => {
+            let value = e.target.value;
+            if (parseFunc === parseFloat) {
+                value = parseFloat(value);
+            } else if (parseFunc === parseInt) {
+                value = parseInt(value, 10);
+            }
+            state[key] = value;
             
-            row1.append("label")
-                .attr("for", d => `label-check-${d.id}`)
-                .attr("class", "text-sm font-medium text-gray-700")
-                .text("Show Annotation:");
+            // Specific action for duration to restart loop
+            if (key === 'particleDuration') {
+                startAnimationLoop();
+            }
 
-            const row1Controls = row1.append("div")
-                .attr("class", "flex items-center space-x-2");
+            updateVisualization();
+            renderUI(); // Re-render collapsible states
+        };
+
+        // Handler for increment/decrement buttons
+        const handleButtonChange = (key, step) => () => {
+            const current = state[key];
+            const newValue = parseFloat((current + step).toFixed(2));
+            
+            // Simple clamping based on element attributes
+            const input = document.getElementById(key);
+            const min = input ? parseFloat(input.min) : -Infinity;
+            const max = input ? parseFloat(input.max) : Infinity;
+
+            if (newValue >= min && newValue <= max) {
+                state[key] = newValue;
                 
-            row1Controls.append("input")
-                .attr("type", "checkbox")
-                .attr("class", "h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500")
-                .attr("id", d => `label-check-${d.id}`)
-                .property("checked", d => d.visible)
-                .on("change", function(event, d) {
-                    d.visible = this.checked;
-                    drawAnnotations(); 
-                });
+                if (key === 'particleDuration') {
+                    startAnimationLoop();
+                }
 
-            // Add Remove Button
-            row1Controls.append("button")
-                .attr("class", "control-btn bg-red-100 text-red-700 hover:bg-red-300")
-                .style("width", "1.5rem")
-                .style("height", "1.5rem")
-                .text("x")
-                .on("click", (event, d) => {
-                    labelsState = labelsState.filter(label => label.id !== d.id);
-                    renderLabelsList(); 
-                    drawAnnotations();  
-                });
+                updateVisualization();
+                renderUI(); 
+            }
+        };
 
-            // Row 2: Annotation Text Input
-            const row2 = newLabelWrappers.append("div")
-                .attr("class", "mb-2");
-            row2.append("label")
-                .attr("class", "text-xs font-medium text-gray-500 block mb-1")
-                .text("Annotation Text (Prefix for Value):");
+        // General Collapsible Functionality
+        const toggleSection = (key) => () => {
+            state[key] = !state[key];
+            renderUI();
+        };
 
-            row2.append("input")
-                .attr("type", "text")
-                .attr("class", "w-full p-1 border border-gray-300 rounded-lg text-sm focus:ring-purple-500 focus:border-purple-500")
-                .attr("value", d => d.text)
-                .on("input", function(event, d) {
-                    d.text = this.value;
-                    drawAnnotations(); 
-                });
-
-            // Row 3: Equation Input (Replaces dropdown)
-            const row3 = newLabelWrappers.append("div");
-            row3.append("label")
-                .attr("class", "text-xs font-medium text-gray-500 block mb-1")
-                .text("Equation/Value Source (e.g., 2 * vSpread):");
-            
-            row3.append("input")
-                .attr("type", "text")
-                .attr("class", "w-full p-1 border border-gray-300 rounded-lg text-sm font-mono focus:ring-purple-500 focus:border-purple-500")
-                .attr("value", d => d.valueSource)
-                .on("input", function(event, d) {
-                    d.valueSource = this.value;
-                    drawAnnotations(); 
-                });
-
-            // Merge and update listeners for existing elements (required for D3 update pattern)
-            labelWrappers.merge(newLabelWrappers);
-            
-            // Ensure listeners are applied to all checkboxes
-            listContainer.selectAll(".label-item input[type='checkbox']").on("change.update", function(event, d) {
-                d.visible = this.checked;
-                drawAnnotations();
-            });
-            // Ensure listeners are applied to all text inputs for text content
-            listContainer.selectAll(".label-item input[type='text']:nth-child(2)").on("input.update", function(event, d) {
-                d.text = this.value;
-                drawAnnotations();
-            });
-             // Ensure listeners are applied to all equation/value source inputs
-            listContainer.selectAll(".label-item input[type='text']:nth-child(4)").on("input.update", function(event, d) {
-                d.valueSource = this.value;
-                drawAnnotations();
-            });
-        }
-
-        // Add New Label logic
-        function addLabel() {
-            labelsState.push({
-                id: nextLabelId++,
-                text: 'New Metric',
-                valueSource: 'hSpread', // Default to tracking hSpread
-                visible: true,
+        // Annotation CRUD Handlers
+        const addLabel = () => {
+            state.labels.push({ 
+                id: state.nextLabelId++, 
+                text: 'New Variable', 
+                valueSource: 'hSpread', 
+                visible: true, 
                 x: 700, 
-                y: 30 + (labelsState.length * 25), // Stacks new labels below existing ones
-                color: d3.schemeCategory10[labelsState.length % 10] || '#9b59b6' // Use a basic color scheme for variety
+                y: 30 + (state.nextLabelId) * 25, 
+                color: `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`
             });
-            renderLabelsList();
-            drawAnnotations();
-        }
+            state.isAnnotationsOpen = true;
+            updateVisualization();
+            renderUI();
+        };
 
+        const updateLabel = (id, field, value) => {
+            state.labels = state.labels.map(label => 
+                label.id === id ? { ...label, [field]: value } : label
+            );
+            updateVisualization();
+            renderUI();
+        };
 
-        // 13. Master Update Function (updateGlitter)
-        function updateGlitter() {
-            // This function is the main trigger for redrawing/restarting when particle parameters change
-            updateBaseScales(); // This updates base scales and triggers updateAxes
-            updatePositions(); 
-            startGlitter();
-            drawAnnotations(); // Re-draw annotations to update tracked values
-        }
+        const removeLabel = (id) => {
+            state.labels = state.labels.filter(label => label.id !== id);
+            updateVisualization();
+            renderUI();
+        };
 
-        // 14. Setup Control Event Handlers
-        function setupControls() {
-            // General input listener for immediate updates
-            document.querySelectorAll('input[type="range"], input[type="text"], select').forEach(input => {
-                input.addEventListener('input', (e) => {
-                    const id = e.target.id;
-                    const value = e.target.value;
-                    let needsGlitterUpdate = false;
+        // --- UI COMPONENT CREATORS (For Native JS Rendering) ---
 
-                    // Update parameters and display values
-                    switch (id) {
-                        // Particle Params
-                        case 'hSpread': hSpread = parseFloat(value); document.getElementById('hSpreadValue').textContent = value; needsGlitterUpdate = true; break;
-                        case 'vSpread': vSpread = parseFloat(value); document.getElementById('vSpreadValue').textContent = value; needsGlitterUpdate = true; break;
-                        case 'densitySkew': DENSITY_SKEW_EXPONENT = parseFloat(value); document.getElementById('densitySkewValue').textContent = DENSITY_SKEW_EXPONENT.toFixed(1); needsGlitterUpdate = true; break;
-                        case 'particleCount': particleCount = parseInt(value); document.getElementById('particleCountValue').textContent = value; needsGlitterUpdate = true; break;
-                        case 'particleDuration': particleDuration = parseInt(value); document.getElementById('particleDurationValue').textContent = value / 1000 + 's'; needsGlitterUpdate = true; break;
-                        case 'colorDiversity': colorDiversity = parseFloat(value); document.getElementById('colorDiversityValue').textContent = (colorDiversity * 100).toFixed(0) + '%'; needsGlitterUpdate = true; break;
-                        case 'xOffset': xOffset = parseInt(value); document.getElementById('xOffsetValue').textContent = value; updatePositions(); break;
-                        case 'yOffset': yOffset = parseInt(value); document.getElementById('yOffsetValue').textContent = value; updatePositions(); break;
-                        case 'xBias': xBias = parseFloat(value); document.getElementById('xBiasValue').textContent = xBias.toFixed(1); needsGlitterUpdate = true; break;
-                        case 'yBias': yBias = parseFloat(value); document.getElementById('yBiasValue').textContent = yBias.toFixed(1); needsGlitterUpdate = true; break;
-
-                        // Boundary Params
-                        case 'rectWidth': rectWidth = parseInt(value); document.getElementById('rectWidthValue').textContent = value; updateRectangle(); break;
-                        case 'rectHeight': rectHeight = parseInt(value); document.getElementById('rectHeightValue').textContent = value; updateRectangle(); break;
-                        
-                        // Axis Params (trigger base scale update)
-                        case 'xAxisMin':
-                        case 'xAxisMax':
-                        case 'yAxisMin':
-                        case 'yAxisMax':
-                        case 'xAxisUnit':
-                        case 'yAxisUnit':
-                            updateBaseScales(); break;
-                            
-                        // Visualization Display Controls
-                        case 'zoomSlider':
-                            updateZoom(); break;
-                        case 'bgLightness': // Background Lightness
-                            updateBackgroundColor(); break;
-                    }
-
-                    // Trigger full update for particle params
-                    if (needsGlitterUpdate) {
-                        updateGlitter();
-                    }
-                });
-            });
-
-            // Button controls for particle parameters
-            document.querySelectorAll('.control-btn').forEach(button => {
-                button.addEventListener('click', (e) => {
-                    const targetId = button.dataset.target;
-                    const action = button.dataset.action;
-                    const inputElement = document.getElementById(targetId);
-                    
-                    if (inputElement) {
-                        const step = parseFloat(inputElement.step) || 1;
-                        let currentValue = parseFloat(inputElement.value);
-                        
-                        if (action === 'increment') {
-                            currentValue = Math.min(parseFloat(inputElement.max), currentValue + step);
-                        } else if (action === 'decrement') {
-                            currentValue = Math.max(parseFloat(inputElement.min), currentValue - step);
-                        }
-
-                        inputElement.value = currentValue.toFixed(inputElement.step.includes('.') ? 1 : 0);
-                        inputElement.dispatchEvent(new Event('input')); // Trigger input event
-                    }
-                });
-            });
+        const createControlBlock = (id, label, value, min, max, step, format = v => v, parseFunc = parseFloat) => {
+            const numericMin = min !== undefined ? parseFloat(min) : -Infinity;
+            const numericMax = max !== undefined ? parseFloat(max) : Infinity;
+            const displayValue = Math.max(numericMin, Math.min(numericMax, value));
             
-            // Checkbox controls (Axis and Rectangle)
-            document.getElementById('enableRectangle').addEventListener('change', (e) => {
-                isRectangleVisible = e.target.checked;
-                updateRectangle();
-            });
-            document.getElementById('enableXAxis').addEventListener('change', (e) => {
-                isXAxisVisible = e.target.checked;
-                updateAxes();
-            });
-            document.getElementById('enableYAxis').addEventListener('change', (e) => {
-                isYAxisVisible = e.target.checked;
-                updateAxes();
-            });
+            let html = `
+                <div class="space-y-2">
+                    <label for="${id}" class="text-sm font-medium text-gray-700 flex justify-between items-center">
+                        <span>${label}</span>
+                        <div class="flex items-center space-x-2">
+                            ${step ? `<button onclick="handleButtonChange('${id}', -${step})()" class="control-btn" ${value - step < numericMin ? 'disabled' : ''}>
+                                <i data-lucide="minus" class="w-4 h-4"></i>
+                            </button>` : ''}
+                            <span class="font-mono text-purple-600 w-10 text-right">${format(displayValue)}</span>
+                            ${step ? `<button onclick="handleButtonChange('${id}', ${step})()" class="control-btn" ${value + step > numericMax ? 'disabled' : ''}>
+                                <i data-lucide="plus" class="w-4 h-4"></i>
+                            </button>` : ''}
+                        </div>
+                    </label>
+                    <input type="range" id="${id}" min="${min}" max="${max}" value="${value}" step="${step}" 
+                           oninput="handleValueChange('${id}', ${parseFunc.name})()" class="w-full" />
+                </div>
+            `;
+            return html;
+        };
 
-            // NEW: Add Label button listener
-            document.getElementById('addLabelBtn').addEventListener('click', addLabel);
+        const createCollapsibleSection = (title, contentHTML, isOpen, toggleKey, targetId) => {
+            const icon = isOpen ? `<i data-lucide="chevron-right" class="w-5 h-5 transition-transform duration-300 text-purple-500"></i>` : `<i data-lucide="chevron-right" class="w-5 h-5 transition-transform duration-300 text-purple-500 rotate-90"></i>`;
+            
+            return `
+                <div class="mb-4">
+                    <button class="section-header w-full flex justify-between items-center py-2 px-2 font-semibold text-base text-gray-700 transition duration-200 rounded hover:bg-purple-50 cursor-pointer" onclick="toggleSection('${toggleKey}')()">
+                        ${title}
+                        ${icon}
+                    </button>
+                    <div id="${targetId}" class="section-content space-y-6 pt-4 px-2" style="display: ${isOpen ? 'block' : 'none'};">
+                        ${contentHTML}
+                    </div>
+                </div>
+            `;
+        };
+        
+        // Full UI Render function (replaces React component render)
+        const renderUI = () => {
+            // Update Title Inputs/Display
+            document.getElementById('canvasTitleInput').value = state.canvasTitle;
+            document.getElementById('canvasDescriptionInput').value = state.canvasDescription;
+            updateTitle();
 
+            // --- Particle Parameters ---
+            let particleContent = `
+                ${createControlBlock('hSpread', 'H Spread ($S_H$)', state.hSpread, 100, 800, 10, v => v, parseInt)}
+                ${createControlBlock('vSpread', 'V Spread ($S_V$)', state.vSpread, 10, 150, 5, v => v, parseInt)}
+                ${createControlBlock('densitySkew', 'Radial Density Skew ($E$)', state.densitySkew, 1.0, 10.0, 0.1, v => v.toFixed(1), parseFloat)}
+                ${createControlBlock('particleCount', 'Burst Count ($N$)', state.particleCount, 5, 200, 5, v => v, parseInt)}
+                ${createControlBlock('particleDuration', 'Speed ($T$)', state.particleDuration, 500, 3000, 100, v => `${v / 1000}s`, parseInt)}
+                ${createControlBlock('colorDiversity', 'Color Diversity ($P_{sat}$)', state.colorDiversity, 0.0, 1.0, 0.05, v => `${(v * 100).toFixed(0)}%`, parseFloat)}
+                ${createControlBlock('xOffset', 'Center X-Offset (\\Delta x)', state.xOffset, -200, 200, 10, v => v, parseInt)}
+                ${createControlBlock('yOffset', 'Center Y-Offset (\\Delta y)', state.yOffset, -100, 100, 10, v => v, parseInt)}
+                ${createControlBlock('xBias', 'X Spread Bias (Bias_X)', state.xBias, -1.0, 1.0, 0.1, v => v.toFixed(1), parseFloat)}
+                ${createControlBlock('yBias', 'Y Spread Bias (Bias_Y)', state.yBias, -1.0, 1.0, 0.1, v => v.toFixed(1), parseFloat)}
+            `;
+            document.getElementById('particle-params-section').innerHTML = createCollapsibleSection(
+                'Particle Parameters', particleContent, state.isParticleOpen, 'isParticleOpen', 'particle-params'
+            );
 
-            // Title/Description listener
-            document.getElementById('canvasTitleInput').addEventListener('input', (e) => {
-                document.getElementById('canvas-title-display').textContent = e.target.value;
-            });
-            document.getElementById('canvasDescriptionInput').addEventListener('input', (e) => {
-                document.getElementById('canvas-description-display').textContent = e.target.value;
-            });
+            // --- Visualization Display ---
+            let visContent = `
+                ${createControlBlock('zoomLevel', 'Zoom Level ($Z$)', state.zoomLevel, 0.5, 3.0, 0.1, v => `${v.toFixed(1)}x`, parseFloat)}
+                ${createControlBlock('bgLightness', 'Background Lightness ($L_{bg}$)', state.bgLightness, 0, 20, 1, v => `${v}%`, parseInt)}
+            `;
+            document.getElementById('vis-display-section').innerHTML = createCollapsibleSection(
+                'Visualization Display', visContent, state.isVisOpen, 'isVisOpen', 'vis-display'
+            );
 
-            // Collapse/Expand functionality
-            document.querySelectorAll('.section-header').forEach(header => {
-                header.addEventListener('click', (e) => {
-                    // Find the button if the click was on the child elements
-                    const button = e.currentTarget;
-                    const targetId = button.dataset.target;
-                    const contentDiv = document.getElementById(targetId);
-                    const icon = document.getElementById(targetId + '-icon');
-                    let isExpanded = button.dataset.expanded === 'true';
+            // --- Boundary Object ---
+            let boundaryContent = `
+                <div class="flex items-center justify-between">
+                    <label for="isRectangleVisible" class="text-sm font-medium text-gray-700">Enable Rectangle Boundary</label>
+                    <input type="checkbox" id="isRectangleVisible" ${state.isRectangleVisible ? 'checked' : ''} 
+                           onchange="state.isRectangleVisible = this.checked; updateVisualization(); renderUI();"
+                           class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
+                </div>
+                ${createControlBlock('rectWidth', 'Boundary Width', state.rectWidth, 100, 900, 10, v => v, parseInt)}
+                ${createControlBlock('rectHeight', 'Boundary Height', state.rectHeight, 50, 300, 10, v => v, parseInt)}
+            `;
+            document.getElementById('boundary-object-section').innerHTML = createCollapsibleSection(
+                'Boundary Object (Clipping)', boundaryContent, state.isBoundaryOpen, 'isBoundaryOpen', 'boundary-object'
+            );
 
-                    if (contentDiv && icon) {
-                        if (isExpanded) {
-                            contentDiv.style.display = 'none';
-                            icon.classList.add('rotate-90'); // Collapse icon state
-                            button.dataset.expanded = 'false';
-                        } else {
-                            contentDiv.style.display = 'block';
-                            icon.classList.remove('rotate-90'); // Expand icon state
-                            button.dataset.expanded = 'true';
-                        }
-                    }
-                });
-            });
-        }
+            // --- Visualization Axes ---
+            let axesContent = `
+                <h4 class="text-md font-medium text-purple-600 border-b pb-1 mb-2">Horizontal (X) Axis</h4>
+                <div class="flex items-center justify-between mb-2">
+                    <label for="isXAxisVisible" class="text-sm font-medium text-gray-700">Enable X-Axis</label>
+                    <input type="checkbox" id="isXAxisVisible" ${state.isXAxisVisible ? 'checked' : ''} 
+                           onchange="state.isXAxisVisible = this.checked; updateVisualization();"
+                           class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
+                </div>
+                <div>
+                    <label for="xAxisUnit" class="text-xs font-medium text-gray-700 block mb-1">Unit Label</label>
+                    <select id="xAxisUnit" onchange="state.xAxisUnit = this.value; updateVisualization();" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="" ${state.xAxisUnit === '' ? 'selected' : ''}>(No Label)</option>
+                        <option value="Years" ${state.xAxisUnit === 'Years' ? 'selected' : ''}>Years</option>
+                        <option value="Integers" ${state.xAxisUnit === 'Integers' ? 'selected' : ''}>Integers</option>
+                        <option value="Meters" ${state.xAxisUnit === 'Meters' ? 'selected' : ''}>Meters</option>
+                    </select>
+                </div>
+                <div class="flex space-x-3">
+                    <div class="flex-1">
+                        <label for="xAxisMin" class="text-xs font-medium text-gray-700 block mb-1">Min Value</label>
+                        <input type="number" id="xAxisMin" value="${state.xAxisMin}" onchange="state.xAxisMin = parseInt(this.value); updateVisualization();" class="w-full p-2 border border-gray-300 rounded-lg text-sm" />
+                    </div>
+                    <div class="flex-1">
+                        <label for="xAxisMax" class="text-xs font-medium text-gray-700 block mb-1">Max Value</label>
+                        <input type="number" id="xAxisMax" value="${state.xAxisMax}" onchange="state.xAxisMax = parseInt(this.value); updateVisualization();" class="w-full p-2 border border-gray-300 rounded-lg text-sm" />
+                    </div>
+                </div>
 
+                <h4 class="text-md font-medium text-purple-600 border-b pb-1 my-3">Vertical (Y) Axis</h4>
+                <div class="flex items-center justify-between mb-2">
+                    <label for="isYAxisVisible" class="text-sm font-medium text-gray-700">Enable Y-Axis</label>
+                    <input type="checkbox" id="isYAxisVisible" ${state.isYAxisVisible ? 'checked' : ''} 
+                           onchange="state.isYAxisVisible = this.checked; updateVisualization();"
+                           class="h-4 w-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500" />
+                </div>
+                <div>
+                    <label for="yAxisUnit" class="text-xs font-medium text-gray-700 block mb-1">Unit Label</label>
+                    <select id="yAxisUnit" onchange="state.yAxisUnit = this.value; updateVisualization();" class="w-full p-2 border border-gray-300 rounded-lg text-sm">
+                        <option value="" ${state.yAxisUnit === '' ? 'selected' : ''}>(No Label)</option>
+                        <option value="Percentage" ${state.yAxisUnit === 'Percentage' ? 'selected' : ''}>Percentage</option>
+                        <option value="Temperature" ${state.yAxisUnit === 'Temperature' ? 'selected' : ''}>Temperature (\\deg\\text{C})</option>
+                        <option value="Integers" ${state.yAxisUnit === 'Integers' ? 'selected' : ''}>Integers</option>
+                    </select>
+                </div>
+                <div class="flex space-x-3">
+                    <div class="flex-1">
+                        <label for="yAxisMin" class="text-xs font-medium text-gray-700 block mb-1">Min Value</label>
+                        <input type="number" id="yAxisMin" value="${state.yAxisMin}" onchange="state.yAxisMin = parseInt(this.value); updateVisualization();" class="w-full p-2 border border-gray-300 rounded-lg text-sm" />
+                    </div>
+                    <div class="flex-1">
+                        <label for="yAxisMax" class="text-xs font-medium text-gray-700 block mb-1">Max Value</label>
+                        <input type="number" id="yAxisMax" value="${state.yAxisMax}" onchange="state.yAxisMax = parseInt(this.value); updateVisualization();" class="w-full p-2 border border-gray-300 rounded-lg text-sm" />
+                    </div>
+                </div>
+            `;
+            document.getElementById('vis-axes-section').innerHTML = createCollapsibleSection(
+                'Visualization Axes', axesContent, state.isAxesOpen, 'isAxesOpen', 'vis-axes'
+            );
 
-        // 15. Initialization
-        function initialize() {
-            // Set initial base scales (reads input fields)
-            updateBaseScales(); 
-            // Apply initial display settings
-            updateZoom();
-            updateBackgroundColor(); // Set initial background color
-            // Setup all controls and listeners
-            setupControls(); 
-            // Render the initial list of labels in the control panel
-            renderLabelsList(); 
-            // Start the glitter animation
-            startGlitter(); 
-            // Draw initial annotations on the SVG
-            drawAnnotations();
-        }
+            // --- Visualization Annotations ---
+            let labelsListHTML = state.labels.map(label => `
+                <div class="p-2 border border-gray-200 rounded-lg bg-gray-50 space-y-1">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-medium text-gray-700 block">Annotation Text</label>
+                        <button onclick="removeLabel(${label.id})" class="text-red-500 hover:text-red-700 transition">
+                            <i data-lucide="x" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <input type="text" value="${label.text}" onchange="updateLabel(${label.id}, 'text', this.value)"
+                           class="w-full p-1 border border-gray-300 rounded-md text-xs" />
+                    <label class="text-xs font-medium text-gray-700 block">Value Equation (e.g., hSpread + vSpread)</label>
+                    <input type="text" value="${label.valueSource}" onchange="updateLabel(${label.id}, 'valueSource', this.value)"
+                           class="w-full p-1 border border-gray-300 rounded-md text-xs font-mono" />
+                    <div class="flex justify-between items-center text-xs">
+                        <label>X/Y Position:</label>
+                        <input type="number" value="${label.x}" onchange="updateLabel(${label.id}, 'x', parseInt(this.value))" class="w-16 p-1 border rounded-md text-xs" />
+                        <input type="number" value="${label.y}" onchange="updateLabel(${label.id}, 'y', parseInt(this.value))" class="w-16 p-1 border rounded-md text-xs" />
+                    </div>
+                </div>
+            `).join('');
 
-        // Start the application setup once the window is fully loaded
-        window.onload = initialize;
+            let annotationContent = `
+                <div id="labels-list" class="space-y-3">${labelsListHTML}</div>
+                <button id="addLabelBtn" onclick="addLabel()" class="w-full p-2 bg-purple-500 text-white font-semibold rounded-lg hover:bg-purple-600 transition duration-150 text-sm">
+                    + Add New Annotation
+                </button>
+                <div class="text-xs text-gray-600 bg-gray-50 p-2 rounded mt-4 border border-gray-200">
+                    <p class="font-semibold mb-1">Variable Legend (Use in equations):</p>
+                    <ul class="list-disc list-inside space-y-0.5 ml-3">
+                        <li>$S_H$: <code class="text-purple-700">hSpread</code></li>
+                        <li>$S_V$: <code class="text-purple-700">vSpread</code></li>
+                        <li>$E$: <code class="text-purple-700">DENSITY_SKEW_EXPONENT</code></li>
+                        <li>$N$: <code class="text-purple-700">particleCount</code></li>
+                        <li>$T$: <code class="text-purple-700">particleDuration</code></li>
+                    </ul>
+                    <p class="mt-1">Example: <code class="text-purple-700">2 * vSpread</code> or <code class="text-purple-700">hSpread + vSpread</code></p>
+                </div>
+            `;
+            document.getElementById('vis-annotations-section').innerHTML = createCollapsibleSection(
+                'Visualization Annotations', annotationContent, state.isAnnotationsOpen, 'isAnnotationsOpen', 'vis-annotations'
+            );
+            
+            // Re-render Lucide icons if they were dynamically added
+            lucide.createIcons();
+        };
+
+        // Initialize on DOMContentLoaded
+        document.addEventListener('DOMContentLoaded', () => {
+            renderUI();
+            initializeD3();
+        });
+
     </script>
 </body>
 </html>
